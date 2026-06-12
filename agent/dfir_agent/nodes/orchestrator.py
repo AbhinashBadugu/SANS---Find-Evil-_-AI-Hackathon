@@ -64,5 +64,10 @@ def route_next(state: CaseState) -> str:
     if host and host.role == HostRole.dc and "dc_identity" not in done:
         return "dc_identity"  # not yet implemented (Phase 7) — router is ready for it
     if "correlation" not in done:
-        return "correlation"
+        return "correlation"  # first pass: fuse, score, detect contradictions, maybe request re-check
+    # Self-correction loop (capped to one round): correlation -> disk_recheck -> correlation.
+    if state.needs_disk_recheck and not state.disk_recheck_done:
+        return "disk_recheck"
+    if state.disk_recheck_done and not state.recorrelated:
+        return "correlation"  # second pass: re-score with the disk re-check evidence
     return "END"

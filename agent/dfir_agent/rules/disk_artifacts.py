@@ -124,6 +124,31 @@ def correlate_mft(
     return findings
 
 
+def search_mft_by_name(mft_csv: str, names: set[str]) -> dict[str, list[dict]]:
+    """Find every MFT row whose FileName matches one of `names` (case-insensitive).
+
+    Used by the self-correction loop to verify, on disk, the binaries that memory
+    flagged only by name (e.g. a hidden process). Returns name -> [match dicts].
+    """
+    p = Path(mft_csv)
+    wanted = {n.lower() for n in names}
+    out: dict[str, list[dict]] = {n: [] for n in wanted}
+    if not p.exists():
+        return out
+    with p.open("r", encoding="utf-8-sig", errors="replace", newline="") as fh:
+        for row in csv.DictReader(fh):
+            fname = (row.get("FileName") or "").strip()
+            if fname.lower() in wanted:
+                parent = normalize_winpath(row.get("ParentPath") or "")
+                out[fname.lower()].append({
+                    "entry": row.get("EntryNumber", "?"),
+                    "parent": parent,
+                    "full": mft_full_path(row.get("ParentPath") or "", fname),
+                    "size": row.get("FileSize"),
+                })
+    return out
+
+
 def correlate_shimcache(
     shim_csv: str,
     target_paths: set[str],

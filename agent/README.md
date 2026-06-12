@@ -8,10 +8,33 @@ evidence action is one MCP tool call, and every fact it reports cites a
 **Design law:** the LLM (later phases) only *extracts* facts and *narrates* prose;
 deterministic Python (`dfir_agent/rules/` + `scoring.py`) *decides* and *scores*.
 
-## Status — Phase 4 complete (timeline agent)
+## Status — Phase 5 complete (correlation + self-correction loop)
 
-Flow: `orchestrator → intake → memory → disk → timeline → correlation`, host
-`xp-tdungan`. The **timeline** node builds a Plaso super-timeline from the carved
+Flow: `orchestrator → intake → memory → disk → timeline → correlation ⇄ disk_recheck`,
+host `xp-tdungan`. The **correlation** node fuses findings across sources, scores by
+distinct evidence families, detects **contradictions**, and drives a **capped
+self-correction loop**: when a suspicious memory lead names a binary disk never
+verified, it routes to **disk_recheck**, which searches the parsed `$MFT` and
+reconciles, then re-correlates once.
+
+Validated live on `xp-tdungan`:
+- **Self-correction (corroborate):** `spinlock.exe` (hidden process, 1 source) →
+  disk re-check finds it in `system32` (foreign 2.2 MB binary) → escalated to
+  `confirmed` (`process_tree` + `disk_mft`); its two PIDs fuse by shared path.
+- **Self-correction (dispute):** `cmd.exe` (hidden process) → disk re-check finds
+  it only in signed Windows locations → **Contradiction**: "legitimate Windows
+  binary — NOT malware"; left `suspicious`, not escalated. (Same shape as the
+  `usboesrv` showpiece, which lands when scaling to nromanoff in Phase 7.)
+- **Contradiction (timestomp):** the implant's `$STANDARD_INFORMATION` (2003) vs
+  `$FILE_NAME` (2012) creation, resolved in favour of FN.
+- Benign allowlist guarantees **no built-in Windows file is marked malware**
+  (`benign_marked_malware: 0`); the implant remains `confirmed`.
+
+Earlier:
+
+## Status — Phase 4 (timeline agent)
+
+Flow adds the **timeline** node, which builds a Plaso super-timeline from the carved
 artifacts (`generate_timeline`), slices it around the implant directory
 (`filter_timeline`), and emits `TimelineEvent`s. It pins **patient-zero timing**
 using the `$FILE_NAME` creation (which ordinary tooling cannot backdate) rather

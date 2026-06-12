@@ -82,12 +82,19 @@ async def _run(case_id: str, host: str | None, case_root: str) -> dict:
         "tool_results": [tr.model_dump(mode="json") for tr in state.tool_results],
         "findings": [f.model_dump(mode="json") for f in state.findings],
         "timeline": [te.model_dump(mode="json") for te in sorted(state.timeline, key=lambda x: x.ts)],
+        "contradictions": [c.model_dump(mode="json") for c in state.contradictions],
+        "self_correction": {
+            "attempted": state.self_correction_attempted,
+            "disk_recheck_done": state.disk_recheck_done,
+            "rechecked_names": state.recheck_names,
+        },
         "citation_report": citation_report.as_dict(),
         "timeline_citations_resolve": timeline_cites_resolve,
         "counts": {
             "tool_calls": len(state.tool_results),
             "findings": len(state.findings),
             "timeline_events": len(state.timeline),
+            "contradictions": len(state.contradictions),
             "provenance_ids_in_ledger": len(prov_ids),
         },
     }
@@ -123,6 +130,16 @@ def main() -> int:
         for te in summary["timeline"]:
             print(f"  {te['ts']}  [{te['source']}]  {te['description'][:88]}")
             print(f"      cite: {te['evidence'][0]['provenance_id']}:{te['evidence'][0]['record_id']}")
+    if summary["contradictions"]:
+        print(f"Contradictions ({len(summary['contradictions'])}):")
+        for c in summary["contradictions"]:
+            print(f"  [{c['contradiction_id']}] {c['claim']}")
+            print(f"      A: {c['source_a']}")
+            print(f"      B: {c['source_b']}")
+            print(f"      -> {c['resolution']}")
+    sc = summary["self_correction"]
+    if sc["disk_recheck_done"]:
+        print(f"Self-correction: re-checked {sc['rechecked_names']} on disk")
     if summary["gaps"]:
         print("Gaps:", *summary["gaps"], sep="\n  - ")
     print(f"\nSummary: {summary['_summary_path']}")
@@ -138,16 +155,25 @@ def main() -> int:
         if fams & MEM and fams & DISK:
             cross.append(f)
     netscan_gap = any("netscan" in g for g in summary["gaps"])
-
-    # Phase-4 acceptance: patient-zero timing is pinned AND every timeline event
-    # cites a provenance_id that resolves.
     pz_pinned = summary["patient_zero_utc"] is not None
     tl_ok = summary["timeline_citations_resolve"]
-    ok = bool(cross) and cr["clean"] and netscan_gap and pz_pinned and tl_ok
+
+    # Phase-5 acceptance: >=1 resolved contradiction; NO benign Windows file is
+    # marked malware (nothing tagged benign_* is confirmed); self-correction ran.
+    resolved_contradictions = [c for c in summary["contradictions"] if c.get("resolution")]
+    benign_marked_malware = [
+        f for f in summary["findings"]
+        if f["confidence"] in ("confirmed", "likely")
+        and ({"benign_binary_confirmed", "benign_allowlist"} & set(f.get("tags", [])))
+    ]
+    ok = (
+        bool(cross) and cr["clean"] and netscan_gap and pz_pinned and tl_ok
+        and bool(resolved_contradictions) and not benign_marked_malware
+    )
     print(
         f"ACCEPTANCE: {'PASS' if ok else 'FAIL'}  "
-        f"(memory+disk confirmed: {len(cross)}, patient_zero_pinned: {pz_pinned} "
-        f"[{summary['patient_zero_utc']}], timeline_cites_resolve: {tl_ok})"
+        f"(memory+disk confirmed: {len(cross)}, resolved_contradictions: {len(resolved_contradictions)}, "
+        f"benign_marked_malware: {len(benign_marked_malware)}, self_correction: {sc['disk_recheck_done']})"
     )
     return 0 if ok else 1
 

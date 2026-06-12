@@ -14,6 +14,7 @@ from __future__ import annotations
 from .nodes import NodeContext
 from .nodes.correlation import correlation
 from .nodes.disk import disk
+from .nodes.disk_recheck import disk_recheck
 from .nodes.intake import intake
 from .nodes.memory import memory
 from .nodes.orchestrator import orchestrator_select_host, route_next
@@ -38,6 +39,8 @@ async def run_case(state: CaseState, ctx: NodeContext, target_host: str | None =
             state = await disk(state, ctx)
         elif nxt == "timeline":
             state = await timeline(state, ctx)
+        elif nxt == "disk_recheck":
+            state = await disk_recheck(state, ctx)
         elif nxt == "correlation":
             state = await correlation(state, ctx)
         elif nxt in _TERMINAL:

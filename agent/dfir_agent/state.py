@@ -189,6 +189,13 @@ class CaseState(BaseModel):
     completed_steps: list[str] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
 
+    # Self-correction loop control (Phase 5), all capped to a single re-check round.
+    needs_disk_recheck: bool = False
+    disk_recheck_done: bool = False
+    self_correction_attempted: bool = False
+    recorrelated: bool = False
+    recheck_names: list[str] = Field(default_factory=list)
+
     iteration: int = 0
     max_iterations: int = 12
 
@@ -202,3 +209,6 @@ class CaseState(BaseModel):
 
     def next_finding_id(self) -> str:
         return f"F-{len(self.findings) + 1:04d}"
+
+    def next_contradiction_id(self) -> str:
+        return f"C-{len(self.contradictions) + 1:04d}"
