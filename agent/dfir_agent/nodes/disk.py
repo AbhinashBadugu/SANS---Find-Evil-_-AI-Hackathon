@@ -76,6 +76,10 @@ async def disk(state: CaseState, ctx: NodeContext) -> CaseState:
                 from pathlib import Path as _P
                 hive_dir = str(_P(extracted[label]).parent)
                 break
+        # Record the carved-artifacts dir so the timeline node can use it as the
+        # Plaso source without re-mounting.
+        if hive_dir:
+            host.extracted_dir = hive_dir
 
         mft_tr = shim_tr = None
         if mft_path:

@@ -8,7 +8,19 @@ evidence action is one MCP tool call, and every fact it reports cites a
 **Design law:** the LLM (later phases) only *extracts* facts and *narrates* prose;
 deterministic Python (`dfir_agent/rules/` + `scoring.py`) *decides* and *scores*.
 
-## Status — Phase 3 complete (disk artifact agent + cross-source correlation)
+## Status — Phase 4 complete (timeline agent)
+
+Flow: `orchestrator → intake → memory → disk → timeline → correlation`, host
+`xp-tdungan`. The **timeline** node builds a Plaso super-timeline from the carved
+artifacts (`generate_timeline`), slices it around the implant directory
+(`filter_timeline`), and emits `TimelineEvent`s. It pins **patient-zero timing**
+using the `$FILE_NAME` creation (which ordinary tooling cannot backdate) rather
+than the timestomped `$STANDARD_INFORMATION`, and emits the SI backdating as its
+own timestomp event. Validated live: patient-zero `2012-04-03 00:35:02 UTC`
+(implant drop), config drop `winclient.reg` at `00:35:10`, timestomp flagged at
+`2003-03-31`; every event cites a resolvable provenance_id.
+
+Earlier flow:
 
 Flow: `orchestrator → intake → memory → disk → correlation`, host `xp-tdungan`.
 Memory runs the full allowlisted plugin set and five deterministic rules

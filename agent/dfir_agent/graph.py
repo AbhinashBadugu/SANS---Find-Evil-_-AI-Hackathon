@@ -17,6 +17,7 @@ from .nodes.disk import disk
 from .nodes.intake import intake
 from .nodes.memory import memory
 from .nodes.orchestrator import orchestrator_select_host, route_next
+from .nodes.timeline import timeline
 from .state import CaseState
 
 _TERMINAL = {"END", "dc_identity"}  # dc_identity not implemented until Phase 7
@@ -35,6 +36,8 @@ async def run_case(state: CaseState, ctx: NodeContext, target_host: str | None =
             state = await memory(state, ctx)
         elif nxt == "disk":
             state = await disk(state, ctx)
+        elif nxt == "timeline":
+            state = await timeline(state, ctx)
         elif nxt == "correlation":
             state = await correlation(state, ctx)
         elif nxt in _TERMINAL:

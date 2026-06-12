@@ -170,6 +170,7 @@ class Host(BaseModel):
     role: HostRole = HostRole.workstation
     memory_image: str | None = None
     disk_image: str | None = None
+    extracted_dir: str | None = None  # runtime: where disk node carved artifacts (Plaso source)
 
 
 class CaseState(BaseModel):

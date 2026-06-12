@@ -64,6 +64,13 @@ async def _run(case_id: str, host: str | None, case_root: str) -> dict:
     prov_ids = load_provenance_ids(case_root, case_id)
     citation_report = validate_citations(state.findings, prov_ids)
 
+    # Patient-zero = earliest timeline event flagged as the marker.
+    pz_events = [te for te in state.timeline if "PATIENT-ZERO MARKER" in te.description]
+    patient_zero = min((te.ts for te in pz_events), default=None)
+    timeline_cites_resolve = all(
+        e.provenance_id in prov_ids for te in state.timeline for e in te.evidence
+    )
+
     summary = {
         "case_id": case_id,
         "host_id": host_id,
@@ -71,12 +78,16 @@ async def _run(case_id: str, host: str | None, case_root: str) -> dict:
         "role": state.hosts[host_id].role.value if host_id else None,
         "completed_steps": state.completed_steps,
         "gaps": state.gaps,
+        "patient_zero_utc": patient_zero.isoformat() if patient_zero else None,
         "tool_results": [tr.model_dump(mode="json") for tr in state.tool_results],
         "findings": [f.model_dump(mode="json") for f in state.findings],
+        "timeline": [te.model_dump(mode="json") for te in sorted(state.timeline, key=lambda x: x.ts)],
         "citation_report": citation_report.as_dict(),
+        "timeline_citations_resolve": timeline_cites_resolve,
         "counts": {
             "tool_calls": len(state.tool_results),
             "findings": len(state.findings),
+            "timeline_events": len(state.timeline),
             "provenance_ids_in_ledger": len(prov_ids),
         },
     }
@@ -107,13 +118,16 @@ def main() -> int:
         print(f"      cites=[{cites}]")
     cr = summary["citation_report"]
     print(f"Citations clean: {cr['clean']}  (uncited={len(cr['uncited'])}, unresolved={len(cr['unresolved'])})")
+    if summary["timeline"]:
+        print(f"Timeline events: {len(summary['timeline'])}  patient-zero: {summary['patient_zero_utc']} UTC")
+        for te in summary["timeline"]:
+            print(f"  {te['ts']}  [{te['source']}]  {te['description'][:88]}")
+            print(f"      cite: {te['evidence'][0]['provenance_id']}:{te['evidence'][0]['record_id']}")
     if summary["gaps"]:
         print("Gaps:", *summary["gaps"], sep="\n  - ")
     print(f"\nSummary: {summary['_summary_path']}")
 
-    # Phase-3 acceptance: the implant is CONFIRMED and MULTI-SOURCE ACROSS the
-    # memory/disk boundary (>=1 memory family AND >=1 disk family); citations
-    # resolve; netscan (thin on XP) recorded as a gap, not invented.
+    # Cross-source confirmed implant (Phase 3 regression).
     MEM = {"process_tree", "command_line", "injection", "network", "services"}
     DISK = {"disk_mft", "disk_shimcache", "disk_registry", "disk_evtx"}
     cross = []
@@ -124,10 +138,16 @@ def main() -> int:
         if fams & MEM and fams & DISK:
             cross.append(f)
     netscan_gap = any("netscan" in g for g in summary["gaps"])
-    ok = bool(cross) and cr["clean"] and netscan_gap
+
+    # Phase-4 acceptance: patient-zero timing is pinned AND every timeline event
+    # cites a provenance_id that resolves.
+    pz_pinned = summary["patient_zero_utc"] is not None
+    tl_ok = summary["timeline_citations_resolve"]
+    ok = bool(cross) and cr["clean"] and netscan_gap and pz_pinned and tl_ok
     print(
         f"ACCEPTANCE: {'PASS' if ok else 'FAIL'}  "
-        f"(memory+disk confirmed: {len(cross)}, citations_clean: {cr['clean']}, netscan_gap: {netscan_gap})"
+        f"(memory+disk confirmed: {len(cross)}, patient_zero_pinned: {pz_pinned} "
+        f"[{summary['patient_zero_utc']}], timeline_cites_resolve: {tl_ok})"
     )
     return 0 if ok else 1
 
