@@ -8,10 +8,29 @@ evidence action is one MCP tool call, and every fact it reports cites a
 **Design law:** the LLM (later phases) only *extracts* facts and *narrates* prose;
 deterministic Python (`dfir_agent/rules/` + `scoring.py`) *decides* and *scores*.
 
-## Status — Phase 6 complete (host report agent)
+## Status — Phase 7 complete (scale to 4 hosts + DC/Identity agent)
 
-Full flow: `orchestrator → intake → memory → disk → timeline → correlation ⇄
-disk_recheck → report`, host `xp-tdungan`. The **report** node assembles a
+`python -m eval.run_case --case srl2015` runs the full per-host pipeline across all
+four SRL-2015 hosts with one shared MCP client, producing a cited `HostReport`
+each plus a case-level `case_summary.json`. On the **domain controller**
+(`win2008R2-controller`) a **DC/Identity** node runs a selective event-log ruleset
+over the Security log (parsed by `parse_evtx`):
+
+- **7045 service installs** — flags `PsExec` (×6, lateral movement) and the
+  `Mnemosyne` driver; classifies **benign** IR/USB services (F-Response, KernelPro
+  `usboesrv`, FresDisk) *out* — never marked malware.
+- **4624 Type-10 (RDP)** and **4648 explicit-credential** logons — surfaces
+  `vibranium` (domain admin) RDP + explicit creds **from 10.3.58.7** (patient-zero
+  `tdungan`'s IP), tagged `src:10.3.58.7` for cross-host correlation.
+
+Every DC finding cites an `EventRecordId` + the `parse_evtx` provenance_id. Per-host
+self-correction, contradictions, timelines, and the citation linter all still apply.
+
+Earlier:
+
+## Status — Phase 6 (host report agent)
+
+The **report** node assembles a
 `HostReport`, renders a fully-cited Markdown report
 (`<host>_report.md`), and runs a **citation linter** that requires every asserted
 claim (a finding above `false_positive`, every contradiction, every timeline

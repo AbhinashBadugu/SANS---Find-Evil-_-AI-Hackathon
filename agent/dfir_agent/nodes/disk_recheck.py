@@ -68,12 +68,17 @@ async def disk_recheck(state: CaseState, ctx: NodeContext) -> CaseState:
                 f.tags = sorted(set(f.tags) | {"not_on_disk"})
             continue
 
-        if is_benign_windows_binary(name) and all(
+        if is_benign_windows_binary(name) and any(
             (m["parent"] or "").startswith(_SIGNED_PREFIXES) for m in matches
         ):
+            # A known Windows binary present in at least one signed location is
+            # benign. Orphaned/deleted-copy MFT entries (e.g. .\PathUnknown\...)
+            # must NOT flip a first-party binary to "malicious".
             # Benign binary: do NOT escalate. Reconcile memory-vs-disk as a contradiction.
             disputed.append(name)
-            locs = ", ".join(sorted({m["parent"] for m in matches if m["parent"]}))
+            signed = sorted({m["parent"] for m in matches
+                             if (m["parent"] or "").startswith(_SIGNED_PREFIXES)})
+            locs = ", ".join(signed)
             for f in targets:
                 f.tags = sorted(set(f.tags) | {"benign_binary_confirmed"})
             state.contradictions.append(Contradiction(

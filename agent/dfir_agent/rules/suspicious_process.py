@@ -200,6 +200,26 @@ def detect_path_masquerade(
     return findings
 
 
+def _is_plausible_process(name: object, pid: object, ppid: object) -> bool:
+    """Reject psscan memory smears: garbage image names or absurd PID/PPID values.
+
+    Real Windows PIDs/PPIDs are small; a valid image name is short printable ASCII.
+    The smear `onScope=NonSxS\\ufffd` (PPID 50788797134638) fails on both counts.
+    """
+    if not isinstance(pid, int) or not (0 <= pid < 1_000_000):
+        return False
+    if ppid is not None and (not isinstance(ppid, int) or not (0 <= ppid < 1_000_000)):
+        return False
+    s = str(name or "")
+    if not s or len(s) > 64:
+        return False
+    if "�" in s or "=" in s:  # replacement char / non-filename chars => smear
+        return False
+    if any(ord(ch) < 32 or ord(ch) > 126 for ch in s):  # non-printable => smear
+        return False
+    return True
+
+
 def detect_hidden_processes(
     psscan_rows: list[dict],
     pslist_rows: list[dict],
@@ -223,6 +243,8 @@ def detect_hidden_processes(
             continue
         if row.get("ExitTime"):  # exited processes legitimately linger in the pool
             continue
+        if not _is_plausible_process(row.get("ImageFileName"), pid, row.get("PPID")):
+            continue  # psscan smear / corrupted pool entry, not a real process
         emitted.add(pid)
         image = str(row.get("ImageFileName") or "?")
         findings.append(

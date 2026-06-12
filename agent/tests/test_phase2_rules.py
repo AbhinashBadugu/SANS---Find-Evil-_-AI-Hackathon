@@ -107,6 +107,17 @@ def test_lone_hidden_process_stays_suspicious():
 
 # --- false-positive regressions (real xp-tdungan legitimate forms) --- #
 
+def test_hidden_process_rejects_psscan_smear():
+    # A corrupted pool entry (garbage name, absurd PPID) must NOT be flagged.
+    rows = [
+        {"PID": 40236, "PPID": 50788797134638, "ImageFileName": "onScope=NonSxS�", "ExitTime": None},
+        {"PID": 1328, "PPID": 4, "ImageFileName": "spinlock.exe", "ExitTime": None},  # real
+    ]
+    f = detect_hidden_processes(rows, [], host_id="h", provenance_id="c", artifact_path=None, next_id=_counter())
+    names = [e.record_id for x in f for e in x.evidence]
+    assert names == ["PID=1328"]  # only the plausible process survives
+
+
 def test_no_fp_on_legitimate_system_paths():
     # smss via \SystemRoot, winlogon as a bare name -> must NOT be flagged.
     rows = [
