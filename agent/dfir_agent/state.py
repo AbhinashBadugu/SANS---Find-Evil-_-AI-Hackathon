@@ -100,6 +100,7 @@ class Finding(BaseModel):
     confidence: Confidence
     rule: str | None = None  # which deterministic rule emitted/last-touched it
     entity_key: str | None = None  # what the claim is ABOUT (e.g. "pid:3296") — merge key
+    paths: list[str] = Field(default_factory=list)  # normalized image paths — cross-source merge key
     source_count: int = 0  # distinct independent source families supporting the claim
     evidence: list[EvidenceReference] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)

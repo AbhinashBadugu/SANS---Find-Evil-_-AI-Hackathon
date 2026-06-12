@@ -37,7 +37,7 @@ DEFAULT_CASE_ROOT = os.path.expanduser("~/analysis/mcp-cases")
 def _summary_path(case_root: str, case_id: str, host_id: str) -> Path:
     d = Path(case_root) / "cases" / case_id / "hosts" / host_id / "agent"
     d.mkdir(parents=True, exist_ok=True)
-    return d / "host_memory_summary.json"
+    return d / "host_summary.json"
 
 
 async def _run(case_id: str, host: str | None, case_root: str) -> dict:
@@ -102,7 +102,7 @@ def main() -> int:
     for f in sorted(summary["findings"], key=lambda x: x["confidence"]):
         fams = sorted({e.get("source_family") for e in f["evidence"] if e.get("source_family")})
         cites = ", ".join(f"{e['provenance_id']}:{e.get('record_id')}" for e in f["evidence"])
-        print(f"  [{f['confidence']}] {f['title']}")
+        print(f"  [{f['confidence']}] {f['title']}  (sources={f['source_count']})")
         print(f"      families={fams}  rule={f['rule']}")
         print(f"      cites=[{cites}]")
     cr = summary["citation_report"]
@@ -111,20 +111,23 @@ def main() -> int:
         print("Gaps:", *summary["gaps"], sep="\n  - ")
     print(f"\nSummary: {summary['_summary_path']}")
 
-    # Phase-2 acceptance:
-    #  (a) the implant is CONFIRMED via >=2 independent families,
-    #  (b) every citation resolves,
-    #  (c) netscan (thin on XP) was recorded as a gap, not invented.
-    confirmed = [
-        f for f in summary["findings"]
-        if f["confidence"] == "confirmed"
-        and len({e.get("source_family") for e in f["evidence"] if e.get("source_family")}) >= 2
-    ]
+    # Phase-3 acceptance: the implant is CONFIRMED and MULTI-SOURCE ACROSS the
+    # memory/disk boundary (>=1 memory family AND >=1 disk family); citations
+    # resolve; netscan (thin on XP) recorded as a gap, not invented.
+    MEM = {"process_tree", "command_line", "injection", "network", "services"}
+    DISK = {"disk_mft", "disk_shimcache", "disk_registry", "disk_evtx"}
+    cross = []
+    for f in summary["findings"]:
+        if f["confidence"] != "confirmed":
+            continue
+        fams = {e.get("source_family") for e in f["evidence"] if e.get("source_family")}
+        if fams & MEM and fams & DISK:
+            cross.append(f)
     netscan_gap = any("netscan" in g for g in summary["gaps"])
-    ok = bool(confirmed) and cr["clean"] and netscan_gap
+    ok = bool(cross) and cr["clean"] and netscan_gap
     print(
         f"ACCEPTANCE: {'PASS' if ok else 'FAIL'}  "
-        f"(confirmed>=2-source: {len(confirmed)}, citations_clean: {cr['clean']}, netscan_gap: {netscan_gap})"
+        f"(memory+disk confirmed: {len(cross)}, citations_clean: {cr['clean']}, netscan_gap: {netscan_gap})"
     )
     return 0 if ok else 1
 

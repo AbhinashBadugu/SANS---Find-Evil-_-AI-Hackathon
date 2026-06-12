@@ -55,8 +55,12 @@ def route_next(state: CaseState) -> str:
         return "intake"
     if "memory" not in done:
         return "memory"
-    # Phases 3+ extend here: disk -> timeline -> [dc_identity] -> correlation -> report.
+    if "disk" not in done:
+        return "disk"
+    # Phase 4 will slot timeline here; Phase 7 the DC/identity node.
     host = state.hosts.get(state.current_host or "")
     if host and host.role == HostRole.dc and "dc_identity" not in done:
         return "dc_identity"  # not yet implemented (Phase 7) — router is ready for it
+    if "correlation" not in done:
+        return "correlation"
     return "END"

@@ -20,13 +20,29 @@ def normalize_winpath(path: str | None) -> str | None:
         return None
     if p.startswith("\\??\\"):
         p = p[4:]
+    if p.startswith(".\\"):  # MFT ParentPath form: ".\WINDOWS\system32\..."
+        p = p[2:]
     if p.startswith("\\systemroot\\"):
         p = WINDIR + p[len("\\systemroot"):]
     p = p.replace("%systemroot%", WINDIR).replace("%windir%", WINDIR)
+    # A volume-relative path with no drive letter -> assume the system drive C:.
+    if p.startswith("\\") and not p.startswith("\\\\"):
+        p = "c:" + p
+    elif p.startswith("windows\\") or p.startswith("winnt\\") or p.startswith("program files"):
+        p = "c:\\" + p
     # Collapse an accidental double backslash from the substitutions above.
     while "\\\\" in p:
         p = p.replace("\\\\", "\\")
     return p
+
+
+def mft_full_path(parent_path: str | None, file_name: str | None) -> str | None:
+    """Build a normalized full path from an MFT row's ParentPath + FileName."""
+    if not file_name:
+        return None
+    parent = (parent_path or "").strip()
+    joined = f"{parent}\\{file_name}" if parent else file_name
+    return normalize_winpath(joined)
 
 
 def split_dir_base(path: str | None) -> tuple[str | None, str | None]:

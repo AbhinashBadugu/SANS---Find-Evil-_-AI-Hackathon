@@ -8,23 +8,25 @@ evidence action is one MCP tool call, and every fact it reports cites a
 **Design law:** the LLM (later phases) only *extracts* facts and *narrates* prose;
 deterministic Python (`dfir_agent/rules/` + `scoring.py`) *decides* and *scores*.
 
-## Status — Phase 2 complete (full memory plugin set)
+## Status — Phase 3 complete (disk artifact agent + cross-source correlation)
 
-`orchestrator → intake → memory`, host `xp-tdungan`. Hashes the image, runs the
-allowlisted set (`info, pslist, psscan, pstree, cmdline, netscan, malfind,
-svcscan`), and applies five deterministic rules — parent-anomaly + path-masquerade
-+ hidden-process diff + injected-PE + suspicious-service. Findings about the same
-PID are **merged**, and confidence is set by the count of **distinct independent
-evidence families** (≥2 → `confirmed`).
+Flow: `orchestrator → intake → memory → disk → correlation`, host `xp-tdungan`.
+Memory runs the full allowlisted plugin set and five deterministic rules
+(parent-anomaly, path-masquerade, hidden-process, injected-PE, suspicious-service).
+The **disk** node mounts read-only (`open_ewf`→`inspect_disk`→`extract_artifacts`),
+parses `$MFT`/shimcache/hives/event-logs, and corroborates each memory-surfaced
+path against disk (existence, **timestomp**, co-located drops, execution record).
+The **correlation** node fuses findings by shared entity/path (union-find) and sets
+confidence from the count of **distinct independent evidence families** (≥2 →
+`confirmed`).
 
-Validated live on `xp-tdungan`: the implant (PID 3296) is **`confirmed`** via three
-independent families — `process_tree` (parent `explorer.exe`, not `services.exe`),
-`command_line` (`\system32\dllhost\svchost.exe` masquerade path), and `injection`
-(105 private RWX regions with `MZ` headers). `spinlock.exe` + attacker `cmd.exe`
-shells surface as `suspicious` leads; `netscan` (unsupported on XP) is recorded as
-a gap, not invented. Citations all resolve, zero shell calls, **zero false
-positives** after anti-FP hardening (XP `\SystemRoot`/bare-name paths and
-system32-hosted services no longer misfire).
+Validated live on `xp-tdungan`: the implant (`\system32\dllhost\svchost.exe`) is
+`confirmed` across **five** families spanning the memory/disk boundary —
+`process_tree` + `command_line` + `injection` (memory) and `disk_mft` (file present,
+102 400 bytes, FN-created 2012-04-03, SI-timestomped to 2003, co-located
+`winclient.reg` config) + `disk_shimcache` (execution record). `spinlock.exe`/
+`cmd.exe` remain `suspicious` leads; `netscan`/`parse_evtx` (thin on XP) are gaps,
+not inventions. Citations all resolve, zero shell calls, zero false positives.
 
 > **Self-correction note:** the injection family corrects the manual analysis,
 > which claimed malfind missed the implant — the raw evidence shows malfind flags

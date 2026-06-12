@@ -167,6 +167,7 @@ def detect_path_masquerade(
         if directory == expected_dir:
             continue
         pid = row.get("PID")
+        full_path = f"{directory}\\{base}"
         findings.append(
             Finding(
                 finding_id=next_id(),
@@ -174,6 +175,7 @@ def detect_path_masquerade(
                 title=f"{base} running from a non-standard path (PID {pid})",
                 category="process_masquerade",
                 entity_key=f"pid:{pid}",
+                paths=[full_path],
                 description=(
                     f"'{base}' (PID {pid}) is running from '{path}', but the legitimate "
                     f"{base} lives in '{expected_dir}'. Placing a system binary in a fake "

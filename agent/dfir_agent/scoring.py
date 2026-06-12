@@ -146,65 +146,110 @@ _LEAD_PRIORITY = {
     "malicious_service": 4,
     "c2_connection": 4,
     "process_masquerade": 3,
+    "dropped_file": 3,
+    "execution_record": 3,
+    "persistence": 3,
     "hidden_process": 2,
 }
 
 
-def merge_by_entity(findings: list[Finding]) -> list[Finding]:
-    """Merge findings that are ABOUT the same entity (e.g. one PID), union their
-    evidence, and (re)assign confidence from the count of distinct families.
+def _finding_keys(f: Finding) -> set[tuple]:
+    """The correlation keys a finding is reachable by: its entity AND its paths."""
+    keys: set[tuple] = set()
+    if f.entity_key:
+        keys.add(("entity", f.entity_key))
+    for p in f.paths:
+        if p:
+            keys.add(("path", p))
+    if not keys:
+        keys.add(("id", f.finding_id))
+    return keys
 
-    This is the within-host correlation that lets the implant accrue
-    process_tree + command_line + injection evidence and reach `confirmed`,
-    while a lone hidden-process lead stays `suspicious`.
+
+def correlate_findings(findings: list[Finding]) -> list[Finding]:
+    """Union-find correlation: merge findings that share an entity_key OR a path.
+
+    This is what lets a memory finding about PID 3296 (which carries the implant's
+    image path) fuse with disk findings keyed by that same path — so the implant
+    accrues memory families AND disk families and is `confirmed` across the
+    memory/disk boundary. Confidence is always recomputed from distinct families.
     """
-    groups: dict[str, list[Finding]] = {}
-    order: list[str] = []
-    for f in findings:
-        key = f.entity_key or f.finding_id
-        if key not in groups:
-            groups[key] = []
-            order.append(key)
-        groups[key].append(f)
+    parent: dict[tuple, tuple] = {}
+
+    def find(x: tuple) -> tuple:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: tuple, b: tuple) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    # Link all keys of each finding together; tie the finding to its own keys.
+    f_key = [(i, _finding_keys(f)) for i, f in enumerate(findings)]
+    for i, keys in f_key:
+        anchor = ("finding", i)
+        for k in keys:
+            union(anchor, k)
+
+    groups: dict[tuple, list[Finding]] = {}
+    order: list[tuple] = []
+    for i, _ in f_key:
+        root = find(("finding", i))
+        if root not in groups:
+            groups[root] = []
+            order.append(root)
+        groups[root].append(findings[i])
 
     merged: list[Finding] = []
-    for key in order:
-        group = groups[key]
-        lead = max(group, key=lambda x: _LEAD_PRIORITY.get(x.category, 0))
-        evidence: list[EvidenceReference] = []
-        seen: set[tuple] = set()
-        tags: set[str] = set()
-        for f in group:
-            tags.update(f.tags)
-            for e in f.evidence:
-                sig = (e.provenance_id, e.record_id, e.source_family)
-                if sig not in seen:
-                    seen.add(sig)
-                    evidence.append(e)
-        fams = {e.source_family for e in evidence if e.source_family}
-        conf = score_by_families(fams)
-        notes = [e.note for e in evidence if e.note]
-        merged.append(
-            Finding(
-                finding_id=lead.finding_id,
-                host_id=lead.host_id,
-                title=lead.title,
-                category=lead.category,
-                description=(
-                    lead.description
-                    + (
-                        f"\nCorroborating signals ({len(fams)} independent families: "
-                        f"{', '.join(sorted(fams))}):\n  - " + "\n  - ".join(notes)
-                        if len(group) > 1
-                        else ""
-                    )
-                ),
-                confidence=conf,
-                rule=lead.rule,
-                entity_key=key,
-                source_count=len(fams),
-                evidence=evidence,
-                tags=sorted(tags),
-            )
-        )
+    for root in order:
+        merged.append(_merge_group(groups[root]))
     return merged
+
+
+def _merge_group(group: list[Finding]) -> Finding:
+    lead = max(group, key=lambda x: _LEAD_PRIORITY.get(x.category, 0))
+    evidence: list[EvidenceReference] = []
+    seen: set[tuple] = set()
+    tags: set[str] = set()
+    paths: set[str] = set()
+    for f in group:
+        tags.update(f.tags)
+        paths.update(f.paths)
+        for e in f.evidence:
+            sig = (e.provenance_id, e.record_id, e.source_family)
+            if sig not in seen:
+                seen.add(sig)
+                evidence.append(e)
+    fams = {e.source_family for e in evidence if e.source_family}
+    conf = score_by_families(fams)
+    notes = [e.note for e in evidence if e.note]
+    description = lead.description
+    if len(group) > 1:
+        description += (
+            f"\nCorroborating signals ({len(fams)} independent families: "
+            f"{', '.join(sorted(fams))}):\n  - " + "\n  - ".join(notes)
+        )
+    return Finding(
+        finding_id=lead.finding_id,
+        host_id=lead.host_id,
+        title=lead.title,
+        category=lead.category,
+        description=description,
+        confidence=conf,
+        rule=lead.rule,
+        entity_key=lead.entity_key or (group[0].entity_key if group else None),
+        paths=sorted(paths),
+        source_count=len(fams),
+        evidence=evidence,
+        tags=sorted(tags),
+    )
+
+
+# Backwards-compatible alias: the within-memory merge is just correlation over a
+# set that happens to share entity keys.
+def merge_by_entity(findings: list[Finding]) -> list[Finding]:
+    return correlate_findings(findings)

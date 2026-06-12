@@ -12,6 +12,8 @@ A hard `max_iterations` cap prevents any self-correction loop from spinning.
 from __future__ import annotations
 
 from .nodes import NodeContext
+from .nodes.correlation import correlation
+from .nodes.disk import disk
 from .nodes.intake import intake
 from .nodes.memory import memory
 from .nodes.orchestrator import orchestrator_select_host, route_next
@@ -21,7 +23,7 @@ _TERMINAL = {"END", "dc_identity"}  # dc_identity not implemented until Phase 7
 
 
 async def run_case(state: CaseState, ctx: NodeContext, target_host: str | None = None) -> CaseState:
-    """Run the Phase-1 flow: orchestrator -> intake -> memory -> END."""
+    """Run the flow: orchestrator -> intake -> memory -> disk -> correlation -> END."""
     while state.iteration < state.max_iterations:
         state.iteration += 1
         nxt = route_next(state)
@@ -31,6 +33,10 @@ async def run_case(state: CaseState, ctx: NodeContext, target_host: str | None =
             state = await intake(state, ctx)
         elif nxt == "memory":
             state = await memory(state, ctx)
+        elif nxt == "disk":
+            state = await disk(state, ctx)
+        elif nxt == "correlation":
+            state = await correlation(state, ctx)
         elif nxt in _TERMINAL:
             break
         else:  # pragma: no cover - guard for an unrouted node name

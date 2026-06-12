@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..rules.benign_allowlist import is_benign_location
 from ..rules.injection import detect_injected_pe
 from ..rules.suspicious_process import (
     detect_hidden_processes,
@@ -27,8 +26,7 @@ from ..rules.suspicious_process import (
     detect_path_masquerade,
 )
 from ..rules.suspicious_service import detect_suspicious_services
-from ..scoring import STRONG_FAMILIES, families_of, merge_by_entity
-from ..state import CaseState, Confidence, ToolResult, ToolResultStatus
+from ..state import CaseState, ToolResult, ToolResultStatus
 from . import NodeContext
 
 # Phase 2 plugin set (all in the server's full allowlist).
@@ -92,36 +90,6 @@ def _read_rows(tr: ToolResult | None) -> list[dict]:
     return data if isinstance(data, list) else data.get("rows", [])
 
 
-def _apply_benign_guard(findings, ctx: NodeContext) -> None:
-    """Anti-FP: a finding whose only support is an identity signal AND whose path
-    is a standard signed Windows location is demoted to false_positive."""
-    for f in findings:
-        fams = families_of(f)
-        if fams & STRONG_FAMILIES:
-            continue  # behavioural evidence overrides a benign location
-        paths = [e.note for e in f.evidence if e.note]
-        if any(is_benign_location(_path_from_note(n)) for n in paths):
-            f.confidence = Confidence.false_positive
-            f.tags = sorted(set(f.tags) | {"benign_allowlist"})
-            ctx.decisions.record(
-                agent_name="memory",
-                step="benign_allowlist",
-                inputs_summary=f"{f.entity_key}",
-                action=f"demoted {f.finding_id} to false_positive",
-                rationale="System file in a standard signed location with no behavioural corroboration.",
-            )
-
-
-def _path_from_note(note: str | None) -> str | None:
-    if not note:
-        return None
-    m = note.replace("'", " ").split()
-    for tok in m:
-        if ":\\" in tok or tok.lower().startswith("c:"):
-            return tok
-    return None
-
-
 async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
     host = state.hosts[state.current_host]
     if not host.memory_image:
@@ -170,23 +138,19 @@ async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
         artifact_path=opath("windows.svcscan"), next_id=state.next_finding_id,
     )
 
-    merged = merge_by_entity(raw)
-    _apply_benign_guard(merged, ctx)
-    state.findings.extend(merged)
+    # The memory node emits RAW per-signal findings; the correlation node is the
+    # single place that merges and sets confidence (so the description is built
+    # once, not nested across two merge passes).
+    state.findings.extend(raw)
     state.completed_steps.append("memory")
-
-    confirmed = sum(1 for f in merged if f.confidence == Confidence.confirmed)
     ctx.decisions.record(
         agent_name="memory",
-        step="correlate_memory",
+        step="extract_signals",
         inputs_summary=(
             f"pslist={len(pslist)} psscan={len(psscan)} cmdline={len(cmdline)} "
             f"malfind={len(malfind)} svcscan={len(svcscan)}"
         ),
-        action=f"{len(raw)} raw signals -> {len(merged)} findings ({confirmed} confirmed)",
-        rationale=(
-            "Per-PID merge accrues independent families; confidence is set "
-            "deterministically (>=2 families -> confirmed)."
-        ),
+        action=f"{len(raw)} raw memory signal(s) emitted (merge deferred to correlation)",
+        rationale="Rules extract independent signals; correlation fuses them by entity/path.",
     )
     return state
