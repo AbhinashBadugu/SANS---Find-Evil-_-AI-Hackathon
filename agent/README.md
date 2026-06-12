@@ -8,13 +8,30 @@ evidence action is one MCP tool call, and every fact it reports cites a
 **Design law:** the LLM (later phases) only *extracts* facts and *narrates* prose;
 deterministic Python (`dfir_agent/rules/` + `scoring.py`) *decides* and *scores*.
 
-## Status — Phase 1 complete (memory vertical slice)
+## Status — Phase 2 complete (full memory plugin set)
 
-`orchestrator → intake → memory`, host `xp-tdungan`. Hashes the memory image,
-runs `windows.info` + `windows.pslist`, applies the deterministic **parent-anomaly
-(masquerade) rule**, and emits a cited summary. Validated live: detects the
-`svchost.exe` implant (PID 3296, parent `explorer.exe` instead of `services.exe`)
-with a resolvable citation, citations clean, zero shell calls.
+`orchestrator → intake → memory`, host `xp-tdungan`. Hashes the image, runs the
+allowlisted set (`info, pslist, psscan, pstree, cmdline, netscan, malfind,
+svcscan`), and applies five deterministic rules — parent-anomaly + path-masquerade
++ hidden-process diff + injected-PE + suspicious-service. Findings about the same
+PID are **merged**, and confidence is set by the count of **distinct independent
+evidence families** (≥2 → `confirmed`).
+
+Validated live on `xp-tdungan`: the implant (PID 3296) is **`confirmed`** via three
+independent families — `process_tree` (parent `explorer.exe`, not `services.exe`),
+`command_line` (`\system32\dllhost\svchost.exe` masquerade path), and `injection`
+(105 private RWX regions with `MZ` headers). `spinlock.exe` + attacker `cmd.exe`
+shells surface as `suspicious` leads; `netscan` (unsupported on XP) is recorded as
+a gap, not invented. Citations all resolve, zero shell calls, **zero false
+positives** after anti-FP hardening (XP `\SystemRoot`/bare-name paths and
+system32-hosted services no longer misfire).
+
+> **Self-correction note:** the injection family corrects the manual analysis,
+> which claimed malfind missed the implant — the raw evidence shows malfind flags
+> PID 3296 (and only 3296) with 105 injected-PE regions.
+
+**Confidence law (operator rule):** nothing is `confirmed` without ≥2 independent
+sources, where independence = distinct evidence family (`scoring.py`).
 
 ## Layout
 

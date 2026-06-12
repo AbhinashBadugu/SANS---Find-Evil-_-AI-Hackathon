@@ -82,6 +82,7 @@ def detect_parent_anomalies(
                 host_id=host_id,
                 title=f"{image} running under an unexpected parent (PID {pid})",
                 category="process_masquerade",
+                entity_key=f"pid:{pid}",
                 description=(
                     f"Process '{image}' (PID {pid}) is a child of {parent_desc}, but a "
                     f"legitimate {image} is started by {expected_desc}. This parent-process "
@@ -96,6 +97,7 @@ def detect_parent_anomalies(
                         record_id=f"PID={pid}",
                         tool="run_volatility_plugin",
                         artifact_path=artifact_path,
+                        source_family="process_tree",
                         note=(
                             f"windows.pslist: {image} PID={pid} PPID={ppid} "
                             f"parent={parent_image or 'unknown'}; expected parent {expected_desc}"
@@ -103,6 +105,150 @@ def detect_parent_anomalies(
                     )
                 ],
                 tags=["memory", "pslist", image],
+            )
+        )
+    return findings
+
+
+# Canonical install directory for known Windows system binaries (lower-case).
+from .winpath import SYSTEM32 as _SYSTEM32, WINDIR as _WINDIR, split_dir_base
+
+EXPECTED_DIR: dict[str, str] = {
+    "svchost.exe": _SYSTEM32,
+    "services.exe": _SYSTEM32,
+    "lsass.exe": _SYSTEM32,
+    "csrss.exe": _SYSTEM32,
+    "winlogon.exe": _SYSTEM32,
+    "smss.exe": _SYSTEM32,
+    "lsm.exe": _SYSTEM32,
+    "spoolsv.exe": _SYSTEM32,
+    "taskhost.exe": _SYSTEM32,
+    "explorer.exe": _WINDIR,
+}
+
+
+def _exe_path_from_args(args: object) -> str | None:
+    """Pull argv[0] (the image path) out of a cmdline 'Args' string."""
+    s = str(args or "").strip()
+    if not s:
+        return None
+    if s.startswith('"'):
+        end = s.find('"', 1)
+        return s[1:end] if end > 0 else s[1:]
+    return s.split(" ", 1)[0]
+
+
+def detect_path_masquerade(
+    cmdline_rows: list[dict],
+    *,
+    host_id: str,
+    provenance_id: str,
+    artifact_path: str | None,
+    next_id,
+) -> list[Finding]:
+    """Flag a known system binary whose image path is NOT its canonical directory.
+
+    Catches the implant directly: `svchost.exe` launched from
+    `C:\\windows\\system32\\dllhost\\` instead of `C:\\windows\\system32\\`.
+    Family = command_line.
+    """
+    findings: list[Finding] = []
+    for row in cmdline_rows:
+        path = _exe_path_from_args(row.get("Args"))
+        directory, base = split_dir_base(path)
+        if not base:
+            continue
+        expected_dir = EXPECTED_DIR.get(base)
+        if not expected_dir:
+            continue
+        # A bare image name (no directory) carries no path evidence — do NOT judge it.
+        if directory is None:
+            continue
+        if directory == expected_dir:
+            continue
+        pid = row.get("PID")
+        findings.append(
+            Finding(
+                finding_id=next_id(),
+                host_id=host_id,
+                title=f"{base} running from a non-standard path (PID {pid})",
+                category="process_masquerade",
+                entity_key=f"pid:{pid}",
+                description=(
+                    f"'{base}' (PID {pid}) is running from '{path}', but the legitimate "
+                    f"{base} lives in '{expected_dir}'. Placing a system binary in a fake "
+                    f"sibling directory is a masquerade technique."
+                ),
+                confidence=Confidence.suspicious,
+                rule="suspicious_process.path_masquerade",
+                source_count=1,
+                evidence=[
+                    EvidenceReference(
+                        provenance_id=provenance_id,
+                        record_id=f"PID={pid}",
+                        tool="run_volatility_plugin",
+                        artifact_path=artifact_path,
+                        source_family="command_line",
+                        note=f"windows.cmdline: PID={pid} image path '{path}' (expected dir {expected_dir})",
+                    )
+                ],
+                tags=["memory", "cmdline", base],
+            )
+        )
+    return findings
+
+
+def detect_hidden_processes(
+    psscan_rows: list[dict],
+    pslist_rows: list[dict],
+    *,
+    host_id: str,
+    provenance_id: str,
+    artifact_path: str | None,
+    next_id,
+) -> list[Finding]:
+    """Hidden-process diff: a process found by psscan (pool scan) but absent from
+    pslist (the linked list) and with NO exit time is potentially unlinked/hidden.
+
+    A `suspicious` lead only — single identity family, never auto-confirmed.
+    """
+    live_pids = {r.get("PID") for r in pslist_rows}
+    findings: list[Finding] = []
+    emitted: set[int] = set()
+    for row in psscan_rows:
+        pid = row.get("PID")
+        if pid in live_pids or pid in emitted:
+            continue
+        if row.get("ExitTime"):  # exited processes legitimately linger in the pool
+            continue
+        emitted.add(pid)
+        image = str(row.get("ImageFileName") or "?")
+        findings.append(
+            Finding(
+                finding_id=next_id(),
+                host_id=host_id,
+                title=f"Possible unlinked/hidden process: {image} (PID {pid})",
+                category="hidden_process",
+                entity_key=f"pid:{pid}",
+                description=(
+                    f"'{image}' (PID {pid}, PPID {row.get('PPID')}) appears in windows.psscan "
+                    f"but not in windows.pslist, with no recorded exit time. This can indicate "
+                    f"DKOM/unlinking to hide a running process."
+                ),
+                confidence=Confidence.suspicious,
+                rule="suspicious_process.hidden_process",
+                source_count=1,
+                evidence=[
+                    EvidenceReference(
+                        provenance_id=provenance_id,
+                        record_id=f"PID={pid}",
+                        tool="run_volatility_plugin",
+                        artifact_path=artifact_path,
+                        source_family="process_tree",
+                        note=f"windows.psscan: PID={pid} {image} present in psscan, absent from pslist, ExitTime=None",
+                    )
+                ],
+                tags=["memory", "psscan", "hidden", image],
             )
         )
     return findings

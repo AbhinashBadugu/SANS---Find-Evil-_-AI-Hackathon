@@ -99,19 +99,33 @@ def main() -> int:
     print(f"\n=== Agent run: {args.case} / {summary['host_id']} ===")
     print(f"OS: {summary['os']}  role: {summary['role']}")
     print(f"Tool calls: {summary['counts']['tool_calls']}  Findings: {summary['counts']['findings']}")
-    for f in summary["findings"]:
+    for f in sorted(summary["findings"], key=lambda x: x["confidence"]):
+        fams = sorted({e.get("source_family") for e in f["evidence"] if e.get("source_family")})
         cites = ", ".join(f"{e['provenance_id']}:{e.get('record_id')}" for e in f["evidence"])
         print(f"  [{f['confidence']}] {f['title']}")
-        print(f"      rule={f['rule']}  cites=[{cites}]")
+        print(f"      families={fams}  rule={f['rule']}")
+        print(f"      cites=[{cites}]")
     cr = summary["citation_report"]
     print(f"Citations clean: {cr['clean']}  (uncited={len(cr['uncited'])}, unresolved={len(cr['unresolved'])})")
     if summary["gaps"]:
         print("Gaps:", *summary["gaps"], sep="\n  - ")
     print(f"\nSummary: {summary['_summary_path']}")
-    # Phase-1 acceptance: at least one resolvable masquerade finding, citations clean.
-    masquerade = [f for f in summary["findings"] if f["category"] == "process_masquerade"]
-    ok = bool(masquerade) and cr["clean"]
-    print("ACCEPTANCE:", "PASS" if ok else "FAIL")
+
+    # Phase-2 acceptance:
+    #  (a) the implant is CONFIRMED via >=2 independent families,
+    #  (b) every citation resolves,
+    #  (c) netscan (thin on XP) was recorded as a gap, not invented.
+    confirmed = [
+        f for f in summary["findings"]
+        if f["confidence"] == "confirmed"
+        and len({e.get("source_family") for e in f["evidence"] if e.get("source_family")}) >= 2
+    ]
+    netscan_gap = any("netscan" in g for g in summary["gaps"])
+    ok = bool(confirmed) and cr["clean"] and netscan_gap
+    print(
+        f"ACCEPTANCE: {'PASS' if ok else 'FAIL'}  "
+        f"(confirmed>=2-source: {len(confirmed)}, citations_clean: {cr['clean']}, netscan_gap: {netscan_gap})"
+    )
     return 0 if ok else 1
 
 

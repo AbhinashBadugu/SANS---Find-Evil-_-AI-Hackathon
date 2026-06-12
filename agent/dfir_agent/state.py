@@ -71,6 +71,7 @@ class EvidenceReference(BaseModel):
     record_id: str | None = None  # e.g. "PID=3296", "EventRecordID=1187", MFT entry
     tool: str | None = None  # the MCP tool that produced it
     artifact_path: str | None = None  # the output file the record lives in
+    source_family: str | None = None  # independence axis for scoring (see scoring.py)
     note: str | None = None
 
 
@@ -98,7 +99,8 @@ class Finding(BaseModel):
     description: str
     confidence: Confidence
     rule: str | None = None  # which deterministic rule emitted/last-touched it
-    source_count: int = 0  # distinct independent sources supporting the claim
+    entity_key: str | None = None  # what the claim is ABOUT (e.g. "pid:3296") — merge key
+    source_count: int = 0  # distinct independent source families supporting the claim
     evidence: list[EvidenceReference] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 

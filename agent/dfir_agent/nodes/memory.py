@@ -1,11 +1,17 @@
-"""Memory Analysis node.
+"""Memory Analysis node (Phase 2: full allowlisted plugin set).
 
-Phase 1 scope: run the two allowlisted plugins `windows.info` and
-`windows.pslist`, read the pslist output back from our own CASE_ROOT area, and
-apply the deterministic parent-anomaly (masquerade) rule. No LLM, no shell.
+Runs windows.info, pslist, psscan, pstree, cmdline, netscan, malfind, svcscan via
+the MCP server, reads the JSON back from our own CASE_ROOT area, and applies the
+deterministic rules:
+  * parent-process anomaly        (process_tree)   -> suspicious_process
+  * image-path masquerade         (command_line)   -> suspicious_process
+  * hidden/unlinked process diff  (process_tree)   -> suspicious_process
+  * injected PE (private RWX+MZ)   (injection)      -> injection
+  * suspicious service binary path (services)       -> suspicious_service
 
-Facts are extracted by parsing the server's JSON output; the *decision* that a
-process is anomalous is made by rules/suspicious_process.py.
+Findings about the same PID are merged; confidence is set from the count of
+DISTINCT evidence families (>=2 -> confirmed). No LLM, no shell. A plugin that
+fails (e.g. netscan on XP) is recorded as a gap, never invented around.
 """
 
 from __future__ import annotations
@@ -13,12 +19,29 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..rules.suspicious_process import detect_parent_anomalies
-from ..state import CaseState, ToolResult, ToolResultStatus
+from ..rules.benign_allowlist import is_benign_location
+from ..rules.injection import detect_injected_pe
+from ..rules.suspicious_process import (
+    detect_hidden_processes,
+    detect_parent_anomalies,
+    detect_path_masquerade,
+)
+from ..rules.suspicious_service import detect_suspicious_services
+from ..scoring import STRONG_FAMILIES, families_of, merge_by_entity
+from ..state import CaseState, Confidence, ToolResult, ToolResultStatus
 from . import NodeContext
 
-# Phase 1 plugin set (both are in the server allowlist).
-PHASE1_PLUGINS = ["windows.info", "windows.pslist"]
+# Phase 2 plugin set (all in the server's full allowlist).
+PHASE2_PLUGINS = [
+    "windows.info",
+    "windows.pslist",
+    "windows.psscan",
+    "windows.pstree",
+    "windows.cmdline",
+    "windows.netscan",
+    "windows.malfind",
+    "windows.svcscan",
+]
 
 
 async def _run_plugin(state: CaseState, ctx: NodeContext, host, plugin: str) -> ToolResult:
@@ -41,21 +64,25 @@ async def _run_plugin(state: CaseState, ctx: NodeContext, host, plugin: str) -> 
         error=resp.get("error"),
     )
     state.add_tool_result(tr)
+    if status != ToolResultStatus.success:
+        state.gaps.append(
+            f"{host.host_id}: {plugin} did not succeed ({(tr.error or 'unknown error')[:120]}); "
+            f"no findings derived from it ({tr.provenance_id})."
+        )
     ctx.decisions.record(
         agent_name="memory",
         step=f"run:{plugin}",
         inputs_summary=f"image={host.memory_image}",
         action=f"run_volatility_plugin({plugin}) -> {status.value} ({tr.provenance_id})",
-        rationale="windows.info confirms the profile; windows.pslist gives the process tree for the masquerade rule.",
+        rationale="Collect the memory artifact; failures are logged as gaps, not guessed around.",
     )
     return tr
 
 
-def _read_rows(output_path: str | None) -> list[dict]:
-    """Read back our own Volatility JSON output (under CASE_ROOT)."""
-    if not output_path:
+def _read_rows(tr: ToolResult | None) -> list[dict]:
+    if not tr or tr.status != ToolResultStatus.success or not tr.output_paths:
         return []
-    p = Path(output_path)
+    p = Path(tr.output_paths[0])
     if not p.exists():
         return []
     try:
@@ -65,6 +92,36 @@ def _read_rows(output_path: str | None) -> list[dict]:
     return data if isinstance(data, list) else data.get("rows", [])
 
 
+def _apply_benign_guard(findings, ctx: NodeContext) -> None:
+    """Anti-FP: a finding whose only support is an identity signal AND whose path
+    is a standard signed Windows location is demoted to false_positive."""
+    for f in findings:
+        fams = families_of(f)
+        if fams & STRONG_FAMILIES:
+            continue  # behavioural evidence overrides a benign location
+        paths = [e.note for e in f.evidence if e.note]
+        if any(is_benign_location(_path_from_note(n)) for n in paths):
+            f.confidence = Confidence.false_positive
+            f.tags = sorted(set(f.tags) | {"benign_allowlist"})
+            ctx.decisions.record(
+                agent_name="memory",
+                step="benign_allowlist",
+                inputs_summary=f"{f.entity_key}",
+                action=f"demoted {f.finding_id} to false_positive",
+                rationale="System file in a standard signed location with no behavioural corroboration.",
+            )
+
+
+def _path_from_note(note: str | None) -> str | None:
+    if not note:
+        return None
+    m = note.replace("'", " ").split()
+    for tok in m:
+        if ":\\" in tok or tok.lower().startswith("c:"):
+            return tok
+    return None
+
+
 async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
     host = state.hosts[state.current_host]
     if not host.memory_image:
@@ -72,35 +129,64 @@ async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
         state.completed_steps.append("memory")
         return state
 
-    pslist_result: ToolResult | None = None
-    for plugin in PHASE1_PLUGINS:
-        tr = await _run_plugin(state, ctx, host, plugin)
-        if plugin == "windows.pslist":
-            pslist_result = tr
+    results: dict[str, ToolResult] = {}
+    for plugin in PHASE2_PLUGINS:
+        results[plugin] = await _run_plugin(state, ctx, host, plugin)
 
-    if not pslist_result or pslist_result.status != ToolResultStatus.success:
-        state.gaps.append(f"{host.host_id}: windows.pslist did not succeed; no process findings.")
-        state.completed_steps.append("memory")
-        return state
+    pslist = _read_rows(results.get("windows.pslist"))
+    psscan = _read_rows(results.get("windows.psscan"))
+    cmdline = _read_rows(results.get("windows.cmdline"))
+    malfind = _read_rows(results.get("windows.malfind"))
+    svcscan = _read_rows(results.get("windows.svcscan"))
 
-    rows = _read_rows(pslist_result.output_paths[0] if pslist_result.output_paths else None)
-    new_findings = detect_parent_anomalies(
-        rows,
-        host_id=host.host_id,
-        provenance_id=pslist_result.provenance_id,
-        artifact_path=pslist_result.output_paths[0] if pslist_result.output_paths else None,
-        next_id=state.next_finding_id,
+    def opath(plugin: str) -> str | None:
+        tr = results.get(plugin)
+        return tr.output_paths[0] if tr and tr.output_paths else None
+
+    raw = []
+    raw += detect_parent_anomalies(
+        pslist, host_id=host.host_id,
+        provenance_id=results["windows.pslist"].provenance_id,
+        artifact_path=opath("windows.pslist"), next_id=state.next_finding_id,
     )
-    state.findings.extend(new_findings)
+    raw += detect_path_masquerade(
+        cmdline, host_id=host.host_id,
+        provenance_id=results["windows.cmdline"].provenance_id,
+        artifact_path=opath("windows.cmdline"), next_id=state.next_finding_id,
+    )
+    raw += detect_hidden_processes(
+        psscan, pslist, host_id=host.host_id,
+        provenance_id=results["windows.psscan"].provenance_id,
+        artifact_path=opath("windows.psscan"), next_id=state.next_finding_id,
+    )
+    raw += detect_injected_pe(
+        malfind, host_id=host.host_id,
+        provenance_id=results["windows.malfind"].provenance_id,
+        artifact_path=opath("windows.malfind"), next_id=state.next_finding_id,
+    )
+    raw += detect_suspicious_services(
+        svcscan, host_id=host.host_id,
+        provenance_id=results["windows.svcscan"].provenance_id,
+        artifact_path=opath("windows.svcscan"), next_id=state.next_finding_id,
+    )
+
+    merged = merge_by_entity(raw)
+    _apply_benign_guard(merged, ctx)
+    state.findings.extend(merged)
     state.completed_steps.append("memory")
+
+    confirmed = sum(1 for f in merged if f.confidence == Confidence.confirmed)
     ctx.decisions.record(
         agent_name="memory",
-        step="apply_masquerade_rule",
-        inputs_summary=f"{len(rows)} processes from windows.pslist",
-        action=f"parent-anomaly rule -> {len(new_findings)} draft finding(s)",
+        step="correlate_memory",
+        inputs_summary=(
+            f"pslist={len(pslist)} psscan={len(psscan)} cmdline={len(cmdline)} "
+            f"malfind={len(malfind)} svcscan={len(svcscan)}"
+        ),
+        action=f"{len(raw)} raw signals -> {len(merged)} findings ({confirmed} confirmed)",
         rationale=(
-            "A core system process with the wrong parent is a deterministic masquerade "
-            "indicator; each finding cites the pslist provenance_id and the specific PID."
+            "Per-PID merge accrues independent families; confidence is set "
+            "deterministically (>=2 families -> confirmed)."
         ),
     )
     return state
