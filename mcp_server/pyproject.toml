@@ -1,0 +1,17 @@
+[project]
+name = "forensic-mcp-server"
+version = "0.1.0"
+description = "Safe, read-only MCP forensic wrappers for the SANS SIFT Workstation"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]",
+    "pydantic>=2",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

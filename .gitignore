@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Local environment (paths only, but keep it out; ship .env.example instead)
+.env
+
+# Case working data / outputs — these live in CASE_ROOT outside the repo,
+# but ignore any that land here. Never commit evidence or parsed output.
+analysis/
+mcp_server/analysis/
+*.plaso
+*.csv
+*.pcap
+forensic_audit.log
+
+# Plaso run logs dropped in the working dir
+*.log.gz
+log2timeline-*.log*
+psort-*.log*
+
+# OS
+.DS_Store
