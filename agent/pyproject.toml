@@ -1,0 +1,24 @@
+[project]
+name = "dfir-agent"
+version = "0.1.0"
+description = "Autonomous DFIR investigation agent driving the forensic MCP server (read-only)."
+requires-python = ">=3.11"
+# Phase 1 runs deterministically on these two deps (both present in mcp_server/.venv,
+# which this package reuses). The LLM/graph layers below are declared for later phases
+# (Report narration, LangGraph wiring) and are installed by the operator when online.
+dependencies = [
+    "pydantic>=2.0",
+    "mcp>=1.0",
+]
+
+[project.optional-dependencies]
+# Added in later phases once outbound install is available (operator-run).
+llm = ["anthropic>=0.40", "langgraph>=0.2"]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["dfir_agent*"]
