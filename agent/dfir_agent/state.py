@@ -199,6 +199,11 @@ class CaseState(BaseModel):
     iteration: int = 0
     max_iterations: int = 12
 
+    # Report node outputs (Phase 6).
+    report_path: str | None = None
+    report_lint: dict = Field(default_factory=dict)
+    report_narrated: bool = False
+
     # ----- small helpers used by nodes ----- #
     def add_tool_result(self, tr: ToolResult) -> None:
         self.tool_results.append(tr)

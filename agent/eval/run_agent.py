@@ -90,6 +90,11 @@ async def _run(case_id: str, host: str | None, case_root: str) -> dict:
         },
         "citation_report": citation_report.as_dict(),
         "timeline_citations_resolve": timeline_cites_resolve,
+        "report": {
+            "path": state.report_path,
+            "lint": state.report_lint,
+            "narrated": state.report_narrated,
+        },
         "counts": {
             "tool_calls": len(state.tool_results),
             "findings": len(state.findings),
@@ -140,6 +145,12 @@ def main() -> int:
     sc = summary["self_correction"]
     if sc["disk_recheck_done"]:
         print(f"Self-correction: re-checked {sc['rechecked_names']} on disk")
+    rep = summary["report"]
+    if rep["path"]:
+        lint = rep["lint"] or {}
+        print(f"Report: {rep['path']}")
+        print(f"  citation lint: {'CLEAN' if lint.get('clean') else 'FAILED'} "
+              f"({len(lint.get('uncited_claims', []))} uncited)  narrated={rep['narrated']}")
     if summary["gaps"]:
         print("Gaps:", *summary["gaps"], sep="\n  - ")
     print(f"\nSummary: {summary['_summary_path']}")
@@ -166,14 +177,22 @@ def main() -> int:
         if f["confidence"] in ("confirmed", "likely")
         and ({"benign_binary_confirmed", "benign_allowlist"} & set(f.get("tags", [])))
     ]
+    # Phase-6 acceptance: a host report rendered AND the citation linter is clean
+    # (0 uncited claims).
+    report_lint = (summary["report"]["lint"] or {})
+    report_rendered = bool(summary["report"]["path"])
+    report_clean = bool(report_lint.get("clean"))
+
     ok = (
         bool(cross) and cr["clean"] and netscan_gap and pz_pinned and tl_ok
         and bool(resolved_contradictions) and not benign_marked_malware
+        and report_rendered and report_clean
     )
     print(
         f"ACCEPTANCE: {'PASS' if ok else 'FAIL'}  "
         f"(memory+disk confirmed: {len(cross)}, resolved_contradictions: {len(resolved_contradictions)}, "
-        f"benign_marked_malware: {len(benign_marked_malware)}, self_correction: {sc['disk_recheck_done']})"
+        f"benign_marked_malware: {len(benign_marked_malware)}, "
+        f"report_rendered: {report_rendered}, citation_lint_clean: {report_clean})"
     )
     return 0 if ok else 1
 

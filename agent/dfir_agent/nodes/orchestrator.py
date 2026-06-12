@@ -70,4 +70,6 @@ def route_next(state: CaseState) -> str:
         return "disk_recheck"
     if state.disk_recheck_done and not state.recorrelated:
         return "correlation"  # second pass: re-score with the disk re-check evidence
+    if "report" not in done:
+        return "report"
     return "END"

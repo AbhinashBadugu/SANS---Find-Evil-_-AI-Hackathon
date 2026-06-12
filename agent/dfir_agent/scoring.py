@@ -12,12 +12,12 @@ from pathlib import Path
 from .state import Confidence, EvidenceReference, Finding
 
 
-def load_provenance_ids(case_root: str | Path, case_id: str) -> set[str]:
-    """Read every provenance_id the MCP server has logged for this case."""
+def load_provenance_index(case_root: str | Path, case_id: str) -> dict[str, dict]:
+    """Map provenance_id -> the full logbook record (tool, command, paths, times)."""
     path = Path(case_root) / "cases" / case_id / "provenance.jsonl"
-    ids: set[str] = set()
+    index: dict[str, dict] = {}
     if not path.exists():
-        return ids
+        return index
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -29,8 +29,13 @@ def load_provenance_ids(case_root: str | Path, case_id: str) -> set[str]:
                 continue
             pid = rec.get("provenance_id")
             if pid:
-                ids.add(pid)
-    return ids
+                index[pid] = rec
+    return index
+
+
+def load_provenance_ids(case_root: str | Path, case_id: str) -> set[str]:
+    """Read every provenance_id the MCP server has logged for this case."""
+    return set(load_provenance_index(case_root, case_id).keys())
 
 
 class CitationReport:

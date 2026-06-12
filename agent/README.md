@@ -8,10 +8,25 @@ evidence action is one MCP tool call, and every fact it reports cites a
 **Design law:** the LLM (later phases) only *extracts* facts and *narrates* prose;
 deterministic Python (`dfir_agent/rules/` + `scoring.py`) *decides* and *scores*.
 
-## Status — Phase 5 complete (correlation + self-correction loop)
+## Status — Phase 6 complete (host report agent)
 
-Flow: `orchestrator → intake → memory → disk → timeline → correlation ⇄ disk_recheck`,
-host `xp-tdungan`. The **correlation** node fuses findings across sources, scores by
+Full flow: `orchestrator → intake → memory → disk → timeline → correlation ⇄
+disk_recheck → report`, host `xp-tdungan`. The **report** node assembles a
+`HostReport`, renders a fully-cited Markdown report
+(`<host>_report.md`), and runs a **citation linter** that requires every asserted
+claim (a finding above `false_positive`, every contradiction, every timeline
+event) to carry a resolvable `provenance_id`. Each evidence line shows
+`{provenance_id, tool, record_id, output_path, timestamp}`. The executive summary
+is deterministic; an **optional LLM narration hook** (`narrate.py`) rephrases it
+only when `anthropic` + `ANTHROPIC_API_KEY` are present (strictly additive — never
+invents facts or citations). Validated live: report renders, **citation lint CLEAN
+(0 uncited claims)**.
+
+Earlier:
+
+## Status — Phase 5 (correlation + self-correction loop)
+
+Flow adds the **correlation** node (fuse across sources, score by
 distinct evidence families, detects **contradictions**, and drives a **capped
 self-correction loop**: when a suspicious memory lead names a binary disk never
 verified, it routes to **disk_recheck**, which searches the parsed `$MFT` and

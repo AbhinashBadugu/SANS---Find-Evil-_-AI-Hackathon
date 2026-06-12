@@ -18,6 +18,7 @@ from .nodes.disk_recheck import disk_recheck
 from .nodes.intake import intake
 from .nodes.memory import memory
 from .nodes.orchestrator import orchestrator_select_host, route_next
+from .nodes.report import report
 from .nodes.timeline import timeline
 from .state import CaseState
 
@@ -43,6 +44,8 @@ async def run_case(state: CaseState, ctx: NodeContext, target_host: str | None =
             state = await disk_recheck(state, ctx)
         elif nxt == "correlation":
             state = await correlation(state, ctx)
+        elif nxt == "report":
+            state = await report(state, ctx)
         elif nxt in _TERMINAL:
             break
         else:  # pragma: no cover - guard for an unrouted node name
