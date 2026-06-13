@@ -8,7 +8,15 @@ evidence action is one MCP tool call, and every fact it reports cites a
 **Design law:** the LLM (later phases) only *extracts* facts and *narrates* prose;
 deterministic Python (`dfir_agent/rules/` + `scoring.py`) *decides* and *scores*.
 
-## Status — Phase 7 complete (scale to 4 hosts + DC/Identity agent)
+## Status — complete: 10/10 milestones vs oracle_v2, 0 hallucinations
+
+Full pipeline + cross-host correlation (Phase 8) + recall-lifting extraction rules
+(Phase 9: netscan/carved-URL C2, staged-archive exfil, Run-key/at-job persistence,
+4672, multi-profile + Prefetch droppers) take recall from 0.263 → **1.0** while
+holding **0 hallucinations, 0 unsupported, 100% cited**. Score:
+`python -m webui.scorer --case srl2015`. 62 tests pass.
+
+### Phase 7 detail — scale to 4 hosts + DC/Identity agent
 
 `python -m eval.run_case --case srl2015` runs the full per-host pipeline across all
 four SRL-2015 hosts with one shared MCP client, producing a cited `HostReport`
