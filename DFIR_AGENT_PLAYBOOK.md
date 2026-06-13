@@ -268,10 +268,25 @@ prose. It must never invent an artifact, path, hash, or `provenance_id`.
 - **Acceptance:** 4 host reports produced; DC shows lateral-movement / admin
   events with citations. **→ STOP.**
 
-### Phase 8 — Cross-host correlation
+### Phase 8 — Cross-host correlation ✅ BUILT
 - Correlate findings across hosts (shared implants, lateral-movement chain).
 - **Acceptance:** a cross-host narrative (patient zero → spread) with per-hop
   citations. **→ STOP.**
+- **Implementation:** `dfir_agent/nodes/cross_host.py` — a case-level deterministic
+  pass over the finished per-host bundles (no new evidence; reuses each finding's
+  provenance). Produces: (1) **shared implants** (same file basename on ≥2 hosts,
+  per-host confidence + cites), (2) an ordered **lateral-movement chain** (each
+  `lateral_movement` finding is a hop INTO its host; `src:<ip>` tags resolved to a
+  source host via `Host.ip` topology — unmapped IPs become a disclosed gap, never a
+  guess), (3) case **patient zero** (earliest per-host marker), (4) a **spread
+  graph**. Rendered to `cases/<case>/CASE_REPORT.md`; lint enforces 0 uncited
+  hops/implants (same gate as the host report).
+- **Run:** `python -m eval.run_case --case srl2015 --host-ip xp-tdungan=10.3.58.7 …`
+  (full pipeline + Phase 8). Re-run Phase 8 alone in seconds from cached
+  `hosts/<host>/agent/findings.json`: `… --cross-host-only`.
+- **Tests:** `tests/test_phase8_cross_host.py` (7 cases): shared-implant ≥2-host
+  rule, patient-zero = earliest, hop attribution via topology, unmapped-IP gap,
+  spread edges, lint clean/dirty.
 
 ### Do NOT build yet
 DNS/DHCP/firewall/proxy/VPN/PCAP parsers, cloud forensics, frontend, Kubernetes,

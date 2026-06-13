@@ -168,6 +168,7 @@ class Host(BaseModel):
     host_id: str
     os: str | None = None
     role: HostRole = HostRole.workstation
+    ip: str | None = None  # topology fact (manifest/operator-supplied) — used to attribute lateral hops
     memory_image: str | None = None
     disk_image: str | None = None
     extracted_dir: str | None = None  # runtime: where disk node carved artifacts (Plaso source)
