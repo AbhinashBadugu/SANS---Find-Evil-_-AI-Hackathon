@@ -43,10 +43,15 @@ async def _call(state: CaseState, ctx: NodeContext, host, tool: str, **kw) -> tu
 
 # Patient-zero is the implant DROP/first execution — anchor it only on findings
 # that represent the implant itself, never on downstream artifacts whose own
-# timestamps mislead: an `at`-job's MFT entry carries the OS-install date, and a
-# staged exfil archive is late-stage. Anchoring on those mis-pins patient zero.
-_NON_ANCHOR_RULES = {"persistence.at_job"}
+# timestamps mislead: an `at`-job's MFT entry carries the OS-install date, a staged
+# exfil archive is late-stage, and a dropper sits in Temp. Anchoring on those
+# mis-pins patient zero.
+_NON_ANCHOR_RULES = {"persistence.at_job", "dropper.multiuser_temp"}
 _NON_ANCHOR_CATEGORIES = {"exfil", "c2_connection"}
+# A Temp directory is NEVER a reliable patient-zero anchor: its name matches the
+# winsxs/servicing Temp tree (OS-install FN dates), and slicing it pins patient
+# zero to a 2009/2010 pending-install file rather than the implant drop.
+_NON_ANCHOR_DIRS = {"temp", "tmp"}
 
 
 def _anchor_dirs(state: CaseState) -> dict[str, str]:
@@ -57,7 +62,7 @@ def _anchor_dirs(state: CaseState) -> dict[str, str]:
             continue  # downstream artifact — not the initial compromise
         for p in f.paths:
             parts = p.rstrip("\\").split("\\")
-            if len(parts) >= 2 and parts[-2]:
+            if len(parts) >= 2 and parts[-2] and parts[-2].lower() not in _NON_ANCHOR_DIRS:
                 d = parts[-2]
                 anchors.setdefault(d, f"\\{d}\\")
     return anchors

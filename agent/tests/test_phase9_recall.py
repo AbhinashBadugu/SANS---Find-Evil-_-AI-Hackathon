@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import json  # noqa: E402
 
 from dfir_agent.rules.dc_events import analyze_dc_events  # noqa: E402
+from dfir_agent.rules.dropper import detect_multiuser_temp_droppers  # noqa: E402
 from dfir_agent.rules.exfil import detect_staged_archives  # noqa: E402
 from dfir_agent.rules.network import detect_c2_connections, is_public_ip  # noqa: E402
 from dfir_agent.rules.persistence import detect_run_keys, detect_scheduled_at_jobs  # noqa: E402
@@ -122,6 +123,25 @@ def test_run_key_flags_masquerade_not_legit(tmp_path):
     assert "Run" in fs[0].description and fs[0].evidence[0].source_family == "disk_registry"
 
 
+def test_multiuser_temp_dropper_flags_a_exe_not_benign(tmp_path):
+    rows = [
+        # a.exe pushed into 3 different users' Temp -> deployment dropper
+        {"EntryNumber": "1", "FileName": "a.exe", "ParentPath": r".\Documents and Settings\tdungan\Local Settings\Temp"},
+        {"EntryNumber": "2", "FileName": "a.exe", "ParentPath": r".\Documents and Settings\vibranium\Local Settings\Temp"},
+        {"EntryNumber": "3", "FileName": "a.exe", "ParentPath": r".\Users\rsydow\AppData\Local\Temp"},
+        # a one-off exe in a single user's Temp -> NOT a multi-profile dropper
+        {"EntryNumber": "4", "FileName": "oneoff.exe", "ParentPath": r".\Users\nfury\AppData\Local\Temp"},
+        # a signed InstallShield helper that each user's installer spawns -> benign
+        {"EntryNumber": "5", "FileName": "isbew64.exe", "ParentPath": r".\Users\a\AppData\Local\Temp"},
+        {"EntryNumber": "6", "FileName": "isbew64.exe", "ParentPath": r".\Users\b\AppData\Local\Temp"},
+    ]
+    fs = detect_multiuser_temp_droppers(_mft(tmp_path, rows), host_id="h", provenance_id="cmd-m", next_id=_counter())
+    names = [f.title for f in fs]
+    assert len(fs) == 1 and "a.exe" in names[0]
+    assert "3 temp locations" in names[0]
+    assert fs[0].entity_key == "dropper:a.exe"
+
+
 def test_run_key_resolves_dir(tmp_path):
     # parse_registry returns the registry dir, not the CSV — detect_run_keys must resolve it
     d = tmp_path / "registry"
@@ -211,8 +231,9 @@ def test_patient_zero_anchors_skip_downstream_artifacts():
         _f("process_masquerade", "suspicious_process.path", r"c:\windows\system32\dllhost\svchost.exe"),
         _f("exfil", "exfil.staged_archive", r"c:\users\public\temp\system4.rar"),
         _f("persistence", "persistence.at_job", r"c:\windows\tasks\at2.job"),
+        _f("dropped_file", "dropper.multiuser_temp", r"c:\users\tdungan\appdata\local\temp\a.exe"),
     ]
     anchors = _anchor_dirs(st)
     assert "dllhost" in anchors            # the implant anchors patient zero
-    assert "temp" not in anchors           # the staged exfil archive does NOT
+    assert "temp" not in anchors           # exfil/dropper live in Temp -> never anchor (winsxs\Temp trap)
     assert "tasks" not in anchors          # the at-job (OS-install MFT date) does NOT
