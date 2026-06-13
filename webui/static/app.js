@@ -12,7 +12,15 @@ let streaming = false;
 const CASE = "srl2015";
 
 // ---------- helpers ----------
-function md(text) { return marked.parse(text || ""); }
+// Render markdown if the library is present; otherwise (e.g. CDN/script blocked)
+// fall back to escaped plain text so the chat never silently fails to render.
+function md(text) {
+  text = text || "";
+  if (typeof marked !== "undefined" && marked.parse) {
+    try { return marked.parse(text); } catch (e) { /* fall through to plain text */ }
+  }
+  return "<p>" + escapeHtml(text).replace(/\n/g, "<br>") + "</p>";
+}
 
 function addMsg(role, text) {
   const el = document.createElement("div");
