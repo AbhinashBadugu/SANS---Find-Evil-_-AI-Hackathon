@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import json  # noqa: E402
 
+from dfir_agent.rules.carved_net import detect_carved_c2_urls  # noqa: E402
 from dfir_agent.rules.dc_events import analyze_dc_events  # noqa: E402
 from dfir_agent.rules.dropper import detect_multiuser_temp_droppers  # noqa: E402
 from dfir_agent.rules.exfil import detect_staged_archives  # noqa: E402
@@ -72,6 +73,29 @@ def _mft(tmp_path, rows):
         for r in rows:
             w.writerow({c: r.get(c, "") for c in _MFT_COLS})
     return str(p)
+
+
+def test_carved_c2_urls_flag_malicious_not_benign(tmp_path):
+    url_txt = tmp_path / "url.txt"
+    url_txt.write_text(
+        "# BULK_EXTRACTOR feature file\n"
+        "100\thttp://199.73.28.114/ads/\tcontext\n"          # flagged C2 IP + beacon
+        "200\thttp://192.168.1.5/ads/\tctx\n"                 # beacon path (internal relay)
+        "300\thttp://207.58.245.179:80/tY77np5Yyi\tctx\n"     # exploit-kit token path
+        "400\thttp://200.46.191.244/Pedido.exe\tctx\n"        # payload download
+        "500\thttp://72.232.11.26/\tctx\n"                    # raw-IP root only -> NOT flagged
+        "600\thttp://www.microsoft.com/update\tctx\n",        # DNS hostname -> NOT flagged
+        encoding="utf-8")
+    fs = detect_carved_c2_urls(str(url_txt), host_id="h", provenance_id="cmd-carve",
+                               c2_ips={"199.73.28.114"}, next_id=_counter())
+    urls = " ".join(f.title for f in fs)
+    assert "199.73.28.114/ads/" in urls
+    assert "192.168.1.5/ads/" in urls
+    assert "207.58.245.179" in urls and "tY77np5Yyi" in urls   # closes M1
+    assert "Pedido.exe" in urls
+    assert "72.232.11.26" not in urls       # raw-IP "/" only is ignored (anti-FP)
+    assert "microsoft.com" not in urls      # DNS hostnames are not raw-IP C2
+    assert all(f.evidence[0].source_family == "network" for f in fs)
 
 
 def test_exfil_flags_rar_in_staging_only(tmp_path):

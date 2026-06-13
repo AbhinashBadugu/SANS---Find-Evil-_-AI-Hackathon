@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..rules.carved_net import detect_carved_c2_urls
 from ..rules.injection import detect_injected_pe
 from ..rules.network import detect_c2_connections
 from ..rules.suspicious_process import (
@@ -152,6 +153,33 @@ async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
             artifact_path=opath("windows.netscan"),
             suspicious_pids=susp_pids, suspicious_names=susp_names, next_id=state.next_finding_id,
         )
+
+    # bulk_extractor carve -> C2/download URLs from memory bytes. netscan only has
+    # IP:port; the carve recovers the URI (/ads/ beacon, payload paths, exploit URLs)
+    # and works on XP where netscan is unsupported.
+    carve_resp = await ctx.client.call(
+        "carve_network_artifacts", case_id=state.case_id,
+        host_id=host.host_id, memory_image_path=host.memory_image,
+    )
+    carve_status = ToolResultStatus(carve_resp.get("status", "failed"))
+    carve_outputs = [str(p) for p in (carve_resp.get("output_paths") or [])]
+    state.add_tool_result(ToolResult(
+        tool="carve_network_artifacts", status=carve_status,
+        provenance_id=carve_resp.get("provenance_id", "UNKNOWN"), host_id=host.host_id,
+        args={"memory_image_path": host.memory_image}, output_paths=carve_outputs,
+        summary="carve_network_artifacts", error=carve_resp.get("error"),
+    ))
+    if carve_status == ToolResultStatus.success:
+        url_txt = next((p for p in carve_outputs if p.endswith("url.txt")), None)
+        if url_txt:
+            c2_ips = {t.split(":", 1)[1] for f in raw for t in f.tags if t.startswith("c2:")}
+            raw += detect_carved_c2_urls(
+                url_txt, host_id=host.host_id,
+                provenance_id=carve_resp["provenance_id"], c2_ips=c2_ips, next_id=state.next_finding_id,
+            )
+    else:
+        state.gaps.append(f"{host.host_id}: carve_network_artifacts did not succeed "
+                          f"({(carve_resp.get('error') or '?')[:80]}); no carved URLs derived.")
 
     # The memory node emits RAW per-signal findings; the correlation node is the
     # single place that merges and sets confidence (so the description is built
