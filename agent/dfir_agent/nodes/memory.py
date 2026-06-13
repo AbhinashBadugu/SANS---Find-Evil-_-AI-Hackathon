@@ -20,6 +20,7 @@ import json
 from pathlib import Path
 
 from ..rules.injection import detect_injected_pe
+from ..rules.network import detect_c2_connections
 from ..rules.suspicious_process import (
     detect_hidden_processes,
     detect_parent_anomalies,
@@ -137,6 +138,20 @@ async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
         provenance_id=results["windows.svcscan"].provenance_id,
         artifact_path=opath("windows.svcscan"), next_id=state.next_finding_id,
     )
+
+    # netscan -> C2 connections. Keyed by the PIDs/names the rules above already
+    # flagged, so a beaconing implant gains the strong `network` family on merge
+    # (and benign chatter from un-flagged processes is left alone).
+    netscan = _read_rows(results.get("windows.netscan"))
+    if netscan and results.get("windows.netscan") and results["windows.netscan"].status == ToolResultStatus.success:
+        susp_pids = {f.entity_key.split(":", 1)[1] for f in raw if (f.entity_key or "").startswith("pid:")}
+        susp_names = {t for f in raw for t in f.tags if t.lower().endswith(".exe")}
+        raw += detect_c2_connections(
+            netscan, host_id=host.host_id,
+            provenance_id=results["windows.netscan"].provenance_id,
+            artifact_path=opath("windows.netscan"),
+            suspicious_pids=susp_pids, suspicious_names=susp_names, next_id=state.next_finding_id,
+        )
 
     # The memory node emits RAW per-signal findings; the correlation node is the
     # single place that merges and sets confidence (so the description is built

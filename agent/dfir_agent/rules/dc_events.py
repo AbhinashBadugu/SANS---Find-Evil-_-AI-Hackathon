@@ -32,6 +32,7 @@ _SUSPICIOUS_SERVICES = {
 _BENIGN_SERVICE_HINTS = ("f-response", "fresponse", "fresdisk", "kernelpro", "usboe", "usboesrv")
 
 _LOCAL_IPS = {"-", "", "127.0.0.1", "::1", "?"}
+_SYSTEM_ACCOUNTS = {"system", "local service", "network service", "-", ""}
 
 
 def _payload(row: dict) -> dict:
@@ -62,6 +63,7 @@ def analyze_dc_events(
     svc_installs = defaultdict(list)   # service-name -> [(time, binary, erid)]
     rdp = defaultdict(list)            # (user, ip) -> [erid]
     explicit = defaultdict(list)       # (subject, target, ip) -> [erid]
+    priv = defaultdict(list)           # target_user -> [erid]  (4672 special-privileges logon)
 
     with p.open("r", encoding="utf-8-sig", errors="replace", newline="") as fh:
         for row in csv.DictReader(fh):
@@ -85,6 +87,12 @@ def analyze_dc_events(
                 # drop machine-account self-logons and IP-less noise
                 if ip not in _LOCAL_IPS and tgt not in ("-", "") and not tgt.endswith("$"):
                     explicit[(subj, tgt, ip)].append(erid)
+            elif eid == "4672":
+                # 4672 carries the account in SubjectUserName (not TargetUserName).
+                pl = _payload(row)
+                subj = (pl.get("SubjectUserName") or "").strip()
+                if subj and not subj.endswith("$") and subj.lower() not in _SYSTEM_ACCOUNTS:
+                    priv[subj].append(erid)
 
     findings: list[Finding] = []
     notes: list[str] = []
@@ -153,5 +161,30 @@ def analyze_dc_events(
         ))
     if len(explicit) > cap:
         notes.append(f"explicit-credential logons capped at {cap} of {len(explicit)} distinct tuples.")
+
+    # --- 4672 special-privileges (admin-equivalent) logons ---
+    # 4672 fires constantly, so we surface it ONLY for accounts already implicated in
+    # lateral movement on this DC (the RDP / explicit-cred actors). That ties the
+    # privileged logon to the intrusion instead of reporting routine admin activity.
+    lateral_actors = {u for (u, _ip) in rdp} | {t for (_s, t, _ip) in explicit}
+    for user in sorted(lateral_actors):
+        erids = priv.get(user)
+        if not erids:
+            continue
+        findings.append(Finding(
+            finding_id=next_id(), host_id=host_id,
+            title=f"Privileged logon (4672): {user} on the DC", category="cred_access",
+            entity_key=f"priv:{user}",
+            description=(
+                f"Account '{user}' received special privileges at logon (Event 4672) {len(erids)}×"
+                f" on the domain controller — admin-equivalent rights (e.g. SeDebug/SeTcb/SeBackup). "
+                f"Because '{user}' is also the account used for lateral movement here, this is "
+                f"credential abuse / privilege use, not routine administration."
+            ),
+            confidence=Confidence.likely, rule="dc_events.privileged_logon", source_count=1,
+            evidence=[_ev(provenance_id, evtx_csv, erids[0],
+                          f"4672 special-privileges logon target={user} count={len(erids)}")],
+            tags=["dc", "eventlog", "4672", "cred_access", "credential"],
+        ))
 
     return findings, notes

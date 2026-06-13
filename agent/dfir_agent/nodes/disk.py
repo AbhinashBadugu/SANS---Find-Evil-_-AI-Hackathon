@@ -14,6 +14,8 @@ memory/disk boundary.
 from __future__ import annotations
 
 from ..rules.disk_artifacts import correlate_mft, correlate_shimcache
+from ..rules.exfil import detect_staged_archives
+from ..rules.persistence import detect_run_keys, detect_scheduled_at_jobs
 from ..state import CaseState, ToolResult, ToolResultStatus
 from . import NodeContext
 
@@ -81,13 +83,13 @@ async def disk(state: CaseState, ctx: NodeContext) -> CaseState:
         if hive_dir:
             host.extracted_dir = hive_dir
 
-        mft_tr = shim_tr = None
+        mft_tr = shim_tr = reg_tr = None
         if mft_path:
             mft_tr, _ = await _call(state, ctx, host, "parse_mft", mft_path=mft_path)
         if system_hive:
             shim_tr, _ = await _call(state, ctx, host, "parse_shimcache", system_hive_path=system_hive)
         if hive_dir:
-            await _call(state, ctx, host, "parse_registry", hive_dir=hive_dir)
+            reg_tr, _ = await _call(state, ctx, host, "parse_registry", hive_dir=hive_dir)
 
         # Event logs: modern .evtx first; XP yields nothing -> fall back to legacy .evt.
         evtx_dir = None
@@ -111,6 +113,25 @@ async def disk(state: CaseState, ctx: NodeContext) -> CaseState:
             new_findings += correlate_shimcache(
                 _csv(shim_tr, "shimcache.csv") or _csv(shim_tr), target_paths,
                 host_id=host.host_id, provenance_id=shim_tr.provenance_id, next_id=state.next_finding_id,
+            )
+        # Full-MFT sweeps independent of memory leads: staged-exfil archives +
+        # `at`-scheduled-task persistence (these aren't memory-surfaced paths).
+        if mft_tr and mft_tr.status == ToolResultStatus.success:
+            mft_full = _csv(mft_tr, "mft.csv") or _csv(mft_tr)
+            new_findings += detect_staged_archives(
+                mft_full, host_id=host.host_id,
+                provenance_id=mft_tr.provenance_id, next_id=state.next_finding_id,
+            )
+            new_findings += detect_scheduled_at_jobs(
+                mft_full, host_id=host.host_id,
+                provenance_id=mft_tr.provenance_id, next_id=state.next_finding_id,
+            )
+        # Registry Run-key persistence: parse_registry returns the registry dir;
+        # detect_run_keys resolves the newest RECmd batch CSV inside it.
+        if reg_tr and reg_tr.status == ToolResultStatus.success and reg_tr.output_paths:
+            new_findings += detect_run_keys(
+                reg_tr.output_paths[0], host_id=host.host_id,
+                provenance_id=reg_tr.provenance_id, next_id=state.next_finding_id,
             )
         state.findings.extend(new_findings)
         ctx.decisions.record(

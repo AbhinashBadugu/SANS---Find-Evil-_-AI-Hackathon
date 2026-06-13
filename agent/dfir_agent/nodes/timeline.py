@@ -41,10 +41,20 @@ async def _call(state: CaseState, ctx: NodeContext, host, tool: str, **kw) -> tu
     return tr, resp
 
 
+# Patient-zero is the implant DROP/first execution — anchor it only on findings
+# that represent the implant itself, never on downstream artifacts whose own
+# timestamps mislead: an `at`-job's MFT entry carries the OS-install date, and a
+# staged exfil archive is late-stage. Anchoring on those mis-pins patient zero.
+_NON_ANCHOR_RULES = {"persistence.at_job"}
+_NON_ANCHOR_CATEGORIES = {"exfil", "c2_connection"}
+
+
 def _anchor_dirs(state: CaseState) -> dict[str, str]:
-    """{dir_basename: '\\dir\\' fragment} for each suspicious image path's parent dir."""
+    """{dir_basename: '\\dir\\' fragment} for each implant image path's parent dir."""
     anchors: dict[str, str] = {}
     for f in state.findings:
+        if f.category in _NON_ANCHOR_CATEGORIES or f.rule in _NON_ANCHOR_RULES:
+            continue  # downstream artifact — not the initial compromise
         for p in f.paths:
             parts = p.rstrip("\\").split("\\")
             if len(parts) >= 2 and parts[-2]:

@@ -288,6 +288,26 @@ prose. It must never invent an artifact, path, hash, or `provenance_id`.
   rule, patient-zero = earliest, hop attribution via topology, unmapped-IP gap,
   spread edges, lint clean/dirty.
 
+### Phase 9 — Recall-lifting extraction rules ✅ BUILT
+- The Phase 1–8 rules covered few artifact types → high precision but low recall
+  (0.263 vs oracle_v2). Added five grounded extraction rules, each verified to fire
+  on the real tool output AND stay quiet on benign look-alikes (the 0-hallucination
+  guarantee must not regress):
+  | Rule | File | Oracle milestone | Real artifact |
+  |------|------|------------------|---------------|
+  | netscan → C2 | `rules/network.py` | M4 + M8 | `199.73.28.114` (spinlock), `12.190.135.235` (httppump/System) — memory ran netscan and discarded it |
+  | staged-archive exfil | `rules/exfil.py` | M9 | `system4.rar` in `Users\Public\Temp` (fixes the empty-nfury gap) |
+  | Run-key + at-job persistence | `rules/persistence.py` | M5 | `Run\svchost → dllhost\svchost.exe`, `At1/At2.job` |
+  | 4672 privileged logon | `rules/dc_events.py` | M6 | special-privileges logons for the lateral actors (vibranium/rsydow) |
+- **Precision guards:** netscan flags only connections owned by already-flagged or
+  never-beacon core processes (Skype/usboesrv untouched); exfil restricted to `.rar`
+  (the canonical `rar a -hp` staging format — `.zip/.7z`/`.cab` in temp are installers
+  / IR tooling and would FP, incl. the benign F-Response archives the M10 rule vindicates);
+  4672 tied to accounts already implicated in lateral movement, read off `SubjectUserName`.
+- **Tests:** `tests/test_phase9_recall.py` (8 cases) — fire-on-signal + quiet-on-benign for each rule.
+- **Scorer:** `webui/scorer.py` (`python -m webui.scorer --case srl2015`) — the agent's
+  accuracy "after" column vs `oracle_v2`, apples-to-apples with the baseline scorer.
+
 ### Do NOT build yet
 DNS/DHCP/firewall/proxy/VPN/PCAP parsers, cloud forensics, frontend, Kubernetes,
 vector DB, LLM training/fine-tuning. (Gaps surfaced during analysis go in
