@@ -15,7 +15,9 @@ import json  # noqa: E402
 
 from dfir_agent.rules.carved_net import detect_carved_c2_urls  # noqa: E402
 from dfir_agent.rules.dc_events import analyze_dc_events  # noqa: E402
-from dfir_agent.rules.dropper import detect_multiuser_temp_droppers  # noqa: E402
+from dfir_agent.rules.dropper import (  # noqa: E402
+    detect_multiuser_temp_droppers, detect_temp_executed_payloads,
+)
 from dfir_agent.rules.exfil import detect_staged_archives  # noqa: E402
 from dfir_agent.rules.network import detect_c2_connections, is_public_ip  # noqa: E402
 from dfir_agent.rules.persistence import detect_run_keys, detect_scheduled_at_jobs  # noqa: E402
@@ -164,6 +166,22 @@ def test_multiuser_temp_dropper_flags_a_exe_not_benign(tmp_path):
     assert len(fs) == 1 and "a.exe" in names[0]
     assert "3 temp locations" in names[0]
     assert fs[0].entity_key == "dropper:a.exe"
+
+
+def test_temp_executed_payload_flags_dropped_and_run(tmp_path):
+    rows = [
+        # payload in Temp + a matching Prefetch entry -> dropped & executed
+        {"EntryNumber": "1", "FileName": "pkxezy1tji98.exe", "ParentPath": r".\Documents and Settings\tdungan\Local Settings\Temp"},
+        {"EntryNumber": "2", "FileName": "PKXEZY1TJI98.EXE-0BCBF29B.pf", "ParentPath": r".\WINDOWS\Prefetch"},
+        # exe in Temp but NEVER executed (no prefetch) -> not flagged
+        {"EntryNumber": "3", "FileName": "notrun.exe", "ParentPath": r".\Users\x\AppData\Local\Temp"},
+        # benign installer in Temp + prefetch -> name-allowlisted, not flagged
+        {"EntryNumber": "4", "FileName": "setup.exe", "ParentPath": r".\Users\x\AppData\Local\Temp"},
+        {"EntryNumber": "5", "FileName": "SETUP.EXE-11111111.pf", "ParentPath": r".\Windows\Prefetch"},
+    ]
+    fs = detect_temp_executed_payloads(_mft(tmp_path, rows), host_id="h", provenance_id="cmd-m", next_id=_counter())
+    assert len(fs) == 1 and "pkxezy1tji98.exe" in fs[0].title
+    assert "Prefetch" in fs[0].description
 
 
 def test_run_key_resolves_dir(tmp_path):

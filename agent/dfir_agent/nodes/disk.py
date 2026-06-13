@@ -14,7 +14,7 @@ memory/disk boundary.
 from __future__ import annotations
 
 from ..rules.disk_artifacts import correlate_mft, correlate_shimcache
-from ..rules.dropper import detect_multiuser_temp_droppers
+from ..rules.dropper import detect_multiuser_temp_droppers, detect_temp_executed_payloads
 from ..rules.exfil import detect_staged_archives
 from ..rules.persistence import detect_run_keys, detect_scheduled_at_jobs
 from ..state import CaseState, ToolResult, ToolResultStatus
@@ -128,6 +128,10 @@ async def disk(state: CaseState, ctx: NodeContext) -> CaseState:
                 provenance_id=mft_tr.provenance_id, next_id=state.next_finding_id,
             )
             new_findings += detect_multiuser_temp_droppers(
+                mft_full, host_id=host.host_id,
+                provenance_id=mft_tr.provenance_id, next_id=state.next_finding_id,
+            )
+            new_findings += detect_temp_executed_payloads(
                 mft_full, host_id=host.host_id,
                 provenance_id=mft_tr.provenance_id, next_id=state.next_finding_id,
             )

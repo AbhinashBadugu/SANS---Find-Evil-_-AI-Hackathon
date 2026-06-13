@@ -26,6 +26,8 @@ csv.field_size_limit(min(2**31 - 1, sys.maxsize))
 _USER_TEMP = re.compile(
     r"(?:documents and settings|users)\\([^\\]+)\\(?:local settings|appdata\\local)\\temp", re.I)
 _WIN_TEMP = re.compile(r"\\windows\\temp", re.I)
+_ANY_TEMP = re.compile(r"(local settings\\temp|appdata\\local\\temp|\\windows\\temp)", re.I)
+_PREFETCH = re.compile(r"(.+?\.exe)-[0-9a-f]{8}\.pf$", re.I)
 # Names that are legitimately identical across profiles (per-user installers/updaters
 # and signed setup engines that each user's install spawns into their own Temp).
 _BENIGN_NAME = re.compile(r"(setup|instal|unins|update|vcredist|vc_redist|redist|"
@@ -85,6 +87,59 @@ def detect_multiuser_temp_droppers(
                 note=f"$MFT: {name} present in {len(profiles)} temp dirs ({', '.join(pretty)}) — multi-profile dropper",
             )],
             tags=["disk", "mft", "dropper"],
+        ))
+        if len(findings) >= cap:
+            break
+    return findings
+
+
+def detect_temp_executed_payloads(
+    mft_csv: str, *, host_id: str, provenance_id: str, next_id, cap: int = 10
+) -> list[Finding]:
+    """An .exe dropped in a Temp dir AND confirmed executed by a Prefetch entry is a
+    run dropped payload — the strongest single-host dropper signal (no multi-profile
+    requirement). On SRL-2015 this surfaces a.exe and the Java-exploit payload
+    pkxezy1tji98.exe, and nothing benign (installers are name-allowlisted)."""
+    from pathlib import Path
+    p = Path(mft_csv)
+    if not p.exists():
+        return []
+
+    temp_exes: dict[str, tuple[str, str]] = {}   # name -> (full_path, entry)
+    executed: set[str] = set()                    # exe names with a Prefetch entry
+    with p.open("r", encoding="utf-8-sig", errors="replace", newline="") as fh:
+        for row in csv.DictReader(fh):
+            fname = (row.get("FileName") or "").strip()
+            parent = row.get("ParentPath") or ""
+            low = fname.lower()
+            if low.endswith(".exe") and _ANY_TEMP.search(parent):
+                full = mft_full_path(parent, fname) or normalize_winpath(parent + "\\" + fname)
+                temp_exes.setdefault(low, (full, row.get("EntryNumber", "?")))
+            elif low.endswith(".pf") and "prefetch" in parent.lower():
+                m = _PREFETCH.match(low)
+                if m:
+                    executed.add(m.group(1))
+
+    findings: list[Finding] = []
+    for name, (full, entry) in temp_exes.items():
+        if name not in executed or _BENIGN_NAME.search(name):
+            continue
+        findings.append(Finding(
+            finding_id=next_id(), host_id=host_id,
+            title=f"Payload executed from Temp: {name}", category="execution_record",
+            entity_key=f"path:{full}", paths=[full],
+            description=(
+                f"'{name}' was dropped into a Temp directory ({full}) and a Windows Prefetch "
+                f"entry confirms it executed. A randomly-named executable run from Temp is a "
+                f"dropped-payload execution — consistent with an exploit/initial-access payload."
+            ),
+            confidence=Confidence.likely, rule="dropper.temp_executed", source_count=1,
+            evidence=[EvidenceReference(
+                provenance_id=provenance_id, record_id=f"MFT#{entry}", tool="parse_mft",
+                artifact_path=mft_csv, source_family="disk_mft",
+                note=f"$MFT: {name} in Temp ({full}) with a Prefetch execution record — dropped payload",
+            )],
+            tags=["disk", "mft", "prefetch", "dropper"],
         ))
         if len(findings) >= cap:
             break
