@@ -21,6 +21,10 @@ forensic_audit.log
 log2timeline-*.log*
 psort-*.log*
 
+# Web UI runtime artifacts (background job logs, server log)
+webui/_jobs/
+webui/_server.log
+
 # OS
 .DS_Store
 .pytest_cache/
