@@ -68,7 +68,9 @@ async function send(text) {
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
+      // sse_starlette frames events with CRLF; normalize so the \n\n split works.
       buf += dec.decode(value, { stream: true });
+      buf = buf.replace(/\r\n/g, "\n");
       const parts = buf.split("\n\n");
       buf = parts.pop();
       for (const part of parts) handleEvent(part, {
