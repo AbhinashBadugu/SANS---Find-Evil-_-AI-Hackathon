@@ -204,7 +204,9 @@ async def api_score(request: Request) -> JSONResponse:
 
 
 async def index(request: Request) -> FileResponse:
-    return FileResponse(_STATIC / "index.html")
+    # no-store on the HTML so the browser always re-fetches it (and thus the
+    # versioned ?v= asset URLs) — prevents a stale cached page from loading old JS.
+    return FileResponse(_STATIC / "index.html", headers={"Cache-Control": "no-store"})
 
 
 routes = [
@@ -228,4 +230,6 @@ if __name__ == "__main__":
     print(f"\n  Find Evil — conversational DFIR agent")
     print(f"  http://127.0.0.1:{port}   (model={MODEL}, "
           f"chat={'ON' if os.getenv('ANTHROPIC_API_KEY') else 'OFF — set ANTHROPIC_API_KEY'})\n")
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    host = os.getenv("DFIR_UI_HOST", "127.0.0.1")
+    uvicorn.run(app, host=host, port=port,
+                log_level=os.getenv("DFIR_UI_LOG", "info"), access_log=True)
