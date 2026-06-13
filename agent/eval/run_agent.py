@@ -31,7 +31,7 @@ from dfir_agent.nodes import NodeContext  # noqa: E402
 from dfir_agent.scoring import load_provenance_ids, validate_citations  # noqa: E402
 from dfir_agent.state import CaseState  # noqa: E402
 
-DEFAULT_CASE_ROOT = os.path.expanduser("~/analysis/mcp-cases")
+DEFAULT_CASE_ROOT = os.path.expanduser("~/Desktop/DFIR agent/Agent analysis")
 
 
 def _summary_path(case_root: str, case_id: str, host_id: str) -> Path:
@@ -40,8 +40,8 @@ def _summary_path(case_root: str, case_id: str, host_id: str) -> Path:
     return d / "host_summary.json"
 
 
-async def _run(case_id: str, host: str | None, case_root: str) -> dict:
-    state = CaseState(case_id=case_id, case_root=case_root)
+async def _run(case_id: str, host: str | None, case_root: str, evidence_root: str | None = None) -> dict:
+    state = CaseState(case_id=case_id, case_root=case_root, evidence_root=evidence_root)
 
     async with ForensicMCPClient() as client:
         # The agent's whole surface is the server's tool menu — prove it loaded.
@@ -50,12 +50,16 @@ async def _run(case_id: str, host: str | None, case_root: str) -> dict:
         # We don't yet know the host until the orchestrator runs; use a temp log
         # then re-point once selected.
         target = host
-        # Resolve the host up front so the decision log is correctly host-scoped
-        # (same default rule the orchestrator uses: prefer an XP host).
-        manifest = load_or_build_manifest(case_root, case_id)
-        resolved_host = host or next(
-            (h for h in manifest if "xp" in h.lower()), sorted(manifest)[0] if manifest else "_pending"
-        )
+        # Resolve the host up front so the decision log is correctly host-scoped.
+        if evidence_root:
+            # Universal path: the orchestrator discovers + selects from the manifest.
+            resolved_host = host or "_pending"
+        else:
+            # Legacy path: same default rule the orchestrator uses (prefer an XP host).
+            manifest = load_or_build_manifest(case_root, case_id)
+            resolved_host = host or next(
+                (h for h in manifest if "xp" in h.lower()), sorted(manifest)[0] if manifest else "_pending"
+            )
         decisions = DecisionLog(case_root, case_id, resolved_host)
         ctx = NodeContext(client=client, decisions=decisions, case_root=case_root)
         state = await run_case(state, ctx, target_host=target)
@@ -113,11 +117,15 @@ async def _run(case_id: str, host: str | None, case_root: str) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run the DFIR agent (Phase 1: memory vertical slice).")
     ap.add_argument("--case", default="srl2015")
-    ap.add_argument("--host", default="xp-tdungan", help="target host_id (default: xp-tdungan)")
+    ap.add_argument("--host", default=None,
+                    help="target host_id (default: auto — legacy prefers an XP host)")
     ap.add_argument("--case-root", default=DEFAULT_CASE_ROOT)
+    ap.add_argument("--evidence-root", default=None,
+                    help="scan this folder via the Universal Case Manifest Builder "
+                         "(case-agnostic discovery). Omit for the legacy manifest path.")
     args = ap.parse_args()
 
-    summary = asyncio.run(_run(args.case, args.host, args.case_root))
+    summary = asyncio.run(_run(args.case, args.host, args.case_root, args.evidence_root))
 
     print(f"\n=== Agent run: {args.case} / {summary['host_id']} ===")
     print(f"OS: {summary['os']}  role: {summary['role']}")

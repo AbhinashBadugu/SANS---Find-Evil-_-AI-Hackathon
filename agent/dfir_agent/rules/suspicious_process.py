@@ -276,3 +276,161 @@ def detect_hidden_processes(
             )
         )
     return findings
+
+
+# --------------------------------------------------------------------------- #
+# windows.pstree — parent-child validation (Phase 2 correlation)
+# --------------------------------------------------------------------------- #
+def _pstree_index(pstree_rows: list[dict]) -> dict[int, dict]:
+    """pid -> {name, ppid}. pstree may prefix names with tree markers ('* ')."""
+    idx: dict[int, dict] = {}
+    for row in pstree_rows:
+        pid = row.get("PID")
+        if isinstance(pid, int):
+            idx[pid] = {
+                "name": _norm(str(row.get("ImageFileName") or "").lstrip("* ").strip()),
+                "ppid": row.get("PPID"),
+            }
+    return idx
+
+
+def validate_parentage_with_pstree(
+    findings: list[Finding],
+    pstree_rows: list[dict],
+    pslist_rows: list[dict],
+    *,
+    provenance_id: str,
+    artifact_path: str | None,
+) -> int:
+    """Corroborate or contradict process findings using windows.pstree (in place).
+
+    pslist and pstree both read the active-process list, so a pstree reference is
+    the SAME `process_tree` family — it strengthens the audit trail and confirms a
+    finding across a second plugin WITHOUT independently inflating confidence
+    (only DISTINCT families confirm). For each process finding:
+
+      * process_masquerade: attach pstree's view of the parent. If pstree's PPID
+        DISAGREES with pslist's, tag a contradiction instead of corroboration.
+      * hidden_process: if pstree (active list) ALSO omits the PID, that is
+        positive corroboration of unlinking/hiding.
+
+    Returns the number of findings annotated.
+    """
+    ptree = _pstree_index(pstree_rows)
+    pslist_ppid = {r.get("PID"): r.get("PPID") for r in pslist_rows if isinstance(r.get("PID"), int)}
+    annotated = 0
+    for f in findings:
+        ek = f.entity_key or ""
+        if not ek.startswith("pid:"):
+            continue
+        try:
+            pid = int(ek.split(":", 1)[1])
+        except ValueError:
+            continue
+
+        if f.category == "hidden_process":
+            if pid not in ptree:
+                f.evidence.append(EvidenceReference(
+                    provenance_id=provenance_id, record_id=f"PID={pid}",
+                    tool="run_volatility_plugin", artifact_path=artifact_path,
+                    source_family="process_tree",
+                    note=(f"windows.pstree: PID={pid} absent from the active process tree too "
+                          f"— consistent with unlinking/hiding"),
+                ))
+                f.tags = sorted(set(f.tags) | {"pstree_corroborated"})
+                annotated += 1
+            continue
+
+        if f.category != "process_masquerade" or pid not in ptree:
+            continue
+        node = ptree[pid]
+        parent_name = _norm(ptree.get(node["ppid"], {}).get("name")) or "unknown"
+        mismatch = pid in pslist_ppid and node["ppid"] != pslist_ppid[pid]
+        f.evidence.append(EvidenceReference(
+            provenance_id=provenance_id, record_id=f"PID={pid}",
+            tool="run_volatility_plugin", artifact_path=artifact_path,
+            source_family="process_tree",
+            note=(f"windows.pstree: PID={pid} {node['name']} child of {parent_name} (PID {node['ppid']})"
+                  + (f" — DISAGREES with pslist PPID {pslist_ppid[pid]}" if mismatch else " — corroborates pslist")),
+        ))
+        f.tags = sorted(set(f.tags) | ({"pstree_parent_mismatch"} if mismatch else {"pstree_corroborated"}))
+        annotated += 1
+    return annotated
+
+
+# --------------------------------------------------------------------------- #
+# windows.cmdline — suspicious command-line content (LOLBIN / encoded execution)
+# --------------------------------------------------------------------------- #
+def _suspicious_cmdline_reason(args_lower: str) -> str | None:
+    """Conservative, well-established abuse patterns only (keeps FPs near zero)."""
+    a = args_lower
+    if "powershell" in a and any(k in a for k in (
+        "-enc", "-encodedcommand", "frombase64string", "downloadstring",
+        "downloadfile", "iex", "invoke-expression", "-w hidden", "-windowstyle hidden",
+    )):
+        return "PowerShell with encoded/hidden/download flags"
+    if "rundll32" in a and ("javascript:" in a or "http://" in a or "https://" in a):
+        return "rundll32 invoking script/remote content"
+    if "mshta" in a and ("http" in a or "javascript:" in a or "vbscript:" in a):
+        return "mshta executing remote/script content"
+    if "regsvr32" in a and "scrobj" in a:
+        return "regsvr32 scriptlet (Squiblydoo)"
+    if "certutil" in a and ("urlcache" in a or "-decode" in a):
+        return "certutil download/decode"
+    if "bitsadmin" in a and "/transfer" in a:
+        return "bitsadmin remote file transfer"
+    if "wmic" in a and "process call create" in a:
+        return "wmic process call create"
+    return None
+
+
+def detect_suspicious_command_lines(
+    cmdline_rows: list[dict],
+    *,
+    host_id: str,
+    provenance_id: str,
+    artifact_path: str | None,
+    next_id,
+) -> list[Finding]:
+    """Flag command lines matching known LOLBIN / encoded-execution abuse patterns.
+
+    A `suspicious` single-family (command_line) lead — never auto-confirmed alone.
+    Keyed by PID so it merges with this PID's other signals (a process that is BOTH
+    masqueraded AND launched with an encoded command line gains corroboration).
+    """
+    findings: list[Finding] = []
+    for row in cmdline_rows:
+        args = str(row.get("Args") or "")
+        reason = _suspicious_cmdline_reason(args.lower())
+        if not reason:
+            continue
+        pid = row.get("PID")
+        proc = str(row.get("Process") or "?")
+        findings.append(
+            Finding(
+                finding_id=next_id(),
+                host_id=host_id,
+                title=f"Suspicious command line: {proc} (PID {pid})",
+                category="suspicious_command_line",
+                entity_key=f"pid:{pid}",
+                description=(
+                    f"PID {pid} ({proc}) command line matches a known abuse pattern "
+                    f"({reason}). Args: {args[:200]}"
+                ),
+                confidence=Confidence.suspicious,
+                rule="suspicious_process.suspicious_command_line",
+                source_count=1,
+                evidence=[
+                    EvidenceReference(
+                        provenance_id=provenance_id,
+                        record_id=f"PID={pid}",
+                        tool="run_volatility_plugin",
+                        artifact_path=artifact_path,
+                        source_family="command_line",
+                        note=f"windows.cmdline: PID={pid} {proc} — {reason}",
+                    )
+                ],
+                tags=["memory", "cmdline", proc.lower()],
+            )
+        )
+    return findings

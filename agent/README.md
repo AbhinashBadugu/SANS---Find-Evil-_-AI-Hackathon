@@ -140,7 +140,7 @@ $VENV -m pytest tests/ -q
 $VENV -m eval.run_agent --case srl2015 --host xp-tdungan
 ```
 
-Outputs land under `~/analysis/mcp-cases/cases/<case>/hosts/<host>/agent/`:
+Outputs land under `~/Desktop/DFIR agent/Agent analysis/cases/<case>/hosts/<host>/agent/`:
 `host_memory_summary.json` and `agent_decisions.jsonl`.
 
 ## Not yet built (later phases, gated)

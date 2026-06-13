@@ -14,25 +14,11 @@ Responsibilities, all deterministic:
 
 from __future__ import annotations
 
-from ..rules.benign_allowlist import is_benign_location
 from ..rules.contradiction import detect_timestomp_contradictions
-from ..scoring import STRONG_FAMILIES, correlate_findings, families_of
+from ..scoring import correlate_findings
 from ..state import CaseState, Confidence
+from ..verification import adversarial_verify
 from . import NodeContext
-
-
-def _apply_benign_guard(findings, ctx: NodeContext) -> None:
-    for f in findings:
-        if families_of(f) & STRONG_FAMILIES:
-            continue  # behavioural evidence overrides a benign location
-        if any(is_benign_location(p) for p in f.paths):
-            f.confidence = Confidence.false_positive
-            f.tags = sorted(set(f.tags) | {"benign_allowlist"})
-            ctx.decisions.record(
-                agent_name="correlation", step="benign_allowlist",
-                inputs_summary=str(f.paths), action=f"demoted {f.finding_id} to false_positive",
-                rationale="Standard signed Windows location with no behavioural corroboration.",
-            )
 
 
 def _needs_recheck(findings) -> set[str]:
@@ -53,7 +39,9 @@ def _needs_recheck(findings) -> set[str]:
 async def correlation(state: CaseState, ctx: NodeContext) -> CaseState:
     before = len(state.findings)
     merged = correlate_findings(state.findings)
-    _apply_benign_guard(merged, ctx)
+    # Adversarial verification: every finding faces a refutation panel before it
+    # stands (subsumes the old benign-allowlist guard) and records its trial.
+    adversarial_verify(merged, ctx)
     state.findings = merged
 
     # Contradiction detection (idempotent: only add ones we haven't recorded).

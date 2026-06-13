@@ -16,7 +16,7 @@ load_dotenv()
 EVIDENCE_ROOT = Path(os.getenv("EVIDENCE_ROOT", "/cases")).expanduser().resolve()
 
 # Write-only results area for everything this server produces.
-CASE_ROOT = Path(os.getenv("CASE_ROOT", "~/analysis/mcp-cases")).expanduser().resolve()
+CASE_ROOT = Path(os.getenv("CASE_ROOT", "~/Desktop/DFIR agent/Agent analysis")).expanduser().resolve()
 
 # The memory tool is `vol` on this machine (not `vol.py`).
 VOLATILITY_BIN = os.getenv("VOLATILITY_BIN", "vol")

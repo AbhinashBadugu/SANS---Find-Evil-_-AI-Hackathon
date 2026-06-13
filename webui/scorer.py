@@ -25,7 +25,7 @@ import os
 import re
 from pathlib import Path
 
-DEFAULT_CASE_ROOT = os.path.expanduser("~/analysis/mcp-cases")
+DEFAULT_CASE_ROOT = os.path.expanduser("~/Desktop/DFIR agent/Agent analysis")
 DEFAULT_ORACLE = os.path.expanduser("~/baseline-runs/scoring/oracle_v2.json")
 HIT_THRESHOLD = 0.5  # same as the baseline scorer
 

@@ -5,7 +5,9 @@ the MCP server, reads the JSON back from our own CASE_ROOT area, and applies the
 deterministic rules:
   * parent-process anomaly        (process_tree)   -> suspicious_process
   * image-path masquerade         (command_line)   -> suspicious_process
+  * suspicious command line       (command_line)   -> suspicious_process
   * hidden/unlinked process diff  (process_tree)   -> suspicious_process
+  * pstree parent-child validation(process_tree)   -> suspicious_process (corroborate/contradict)
   * injected PE (private RWX+MZ)   (injection)      -> injection
   * suspicious service binary path (services)       -> suspicious_service
 
@@ -26,6 +28,8 @@ from ..rules.suspicious_process import (
     detect_hidden_processes,
     detect_parent_anomalies,
     detect_path_masquerade,
+    detect_suspicious_command_lines,
+    validate_parentage_with_pstree,
 )
 from ..rules.suspicious_service import detect_suspicious_services
 from ..state import CaseState, ToolResult, ToolResultStatus
@@ -105,6 +109,7 @@ async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
 
     pslist = _read_rows(results.get("windows.pslist"))
     psscan = _read_rows(results.get("windows.psscan"))
+    pstree = _read_rows(results.get("windows.pstree"))
     cmdline = _read_rows(results.get("windows.cmdline"))
     malfind = _read_rows(results.get("windows.malfind"))
     svcscan = _read_rows(results.get("windows.svcscan"))
@@ -120,6 +125,11 @@ async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
         artifact_path=opath("windows.pslist"), next_id=state.next_finding_id,
     )
     raw += detect_path_masquerade(
+        cmdline, host_id=host.host_id,
+        provenance_id=results["windows.cmdline"].provenance_id,
+        artifact_path=opath("windows.cmdline"), next_id=state.next_finding_id,
+    )
+    raw += detect_suspicious_command_lines(
         cmdline, host_id=host.host_id,
         provenance_id=results["windows.cmdline"].provenance_id,
         artifact_path=opath("windows.cmdline"), next_id=state.next_finding_id,
@@ -181,6 +191,18 @@ async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
         state.gaps.append(f"{host.host_id}: carve_network_artifacts did not succeed "
                           f"({(carve_resp.get('error') or '?')[:80]}); no carved URLs derived.")
 
+    # pstree parent-child validation: corroborate/contradict the process findings
+    # above with a SECOND process plugin. Same `process_tree` family, so it enriches
+    # the citation trail without independently inflating confidence.
+    pstree_tr = results.get("windows.pstree")
+    pstree_annotated = 0
+    if pstree and pstree_tr and pstree_tr.status == ToolResultStatus.success:
+        pstree_annotated = validate_parentage_with_pstree(
+            raw, pstree, pslist,
+            provenance_id=pstree_tr.provenance_id,
+            artifact_path=opath("windows.pstree"),
+        )
+
     # The memory node emits RAW per-signal findings; the correlation node is the
     # single place that merges and sets confidence (so the description is built
     # once, not nested across two merge passes).
@@ -190,10 +212,11 @@ async def memory(state: CaseState, ctx: NodeContext) -> CaseState:
         agent_name="memory",
         step="extract_signals",
         inputs_summary=(
-            f"pslist={len(pslist)} psscan={len(psscan)} cmdline={len(cmdline)} "
+            f"pslist={len(pslist)} psscan={len(psscan)} pstree={len(pstree)} cmdline={len(cmdline)} "
             f"malfind={len(malfind)} svcscan={len(svcscan)}"
         ),
-        action=f"{len(raw)} raw memory signal(s) emitted (merge deferred to correlation)",
+        action=(f"{len(raw)} raw memory signal(s) emitted; pstree corroborated/contradicted "
+                f"{pstree_annotated} process finding(s) (merge deferred to correlation)"),
         rationale="Rules extract independent signals; correlation fuses them by entity/path.",
     )
     return state

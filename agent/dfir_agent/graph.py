@@ -1,57 +1,29 @@
-"""Graph runner.
+"""Graph runner — OS-family matched dispatch.
 
-A minimal, deterministic driver that threads `CaseState` through nodes using the
-orchestrator's `route_next` router. The node contract (async `state, ctx ->
-state`) and the explicit router mirror LangGraph exactly, so this can be swapped
-for a compiled `StateGraph` once `langgraph` is installed (operator, online) with
-no change to node code.
+Two deterministic steps:
+  1. orchestrator_select_host  — discover the case, select exactly one host.
+  2. select_analyzer(os_family) — route that host to EXACTLY ONE OS-family analyzer.
 
-A hard `max_iterations` cap prevents any self-correction loop from spinning.
+WindowsAnalyzer wraps the existing memory/disk/timeline/correlation pipeline
+unchanged (it owns `route_next` + the node functions). Linux/macOS analyzers are
+detected-but-not-implemented stubs; an undetermined OS goes to UnknownEvidenceHandler.
+No analyzer can run another family's tools, because only one is ever instantiated.
 """
 
 from __future__ import annotations
 
+from .analyzers import select_analyzer
+from .manifest_intake import host_os_family
 from .nodes import NodeContext
-from .nodes.correlation import correlation
-from .nodes.dc_identity import dc_identity
-from .nodes.disk import disk
-from .nodes.disk_recheck import disk_recheck
-from .nodes.intake import intake
-from .nodes.memory import memory
-from .nodes.orchestrator import orchestrator_select_host, route_next
-from .nodes.report import report
-from .nodes.timeline import timeline
+from .nodes.orchestrator import orchestrator_select_host
 from .state import CaseState
-
-_TERMINAL = {"END"}
 
 
 async def run_case(state: CaseState, ctx: NodeContext, target_host: str | None = None) -> CaseState:
-    """Run the flow: orchestrator -> intake -> memory -> disk -> correlation -> END."""
-    while state.iteration < state.max_iterations:
-        state.iteration += 1
-        nxt = route_next(state)
-        if nxt == "orchestrator":
-            state = await orchestrator_select_host(state, ctx, target_host=target_host)
-        elif nxt == "intake":
-            state = await intake(state, ctx)
-        elif nxt == "memory":
-            state = await memory(state, ctx)
-        elif nxt == "disk":
-            state = await disk(state, ctx)
-        elif nxt == "timeline":
-            state = await timeline(state, ctx)
-        elif nxt == "dc_identity":
-            state = await dc_identity(state, ctx)
-        elif nxt == "disk_recheck":
-            state = await disk_recheck(state, ctx)
-        elif nxt == "correlation":
-            state = await correlation(state, ctx)
-        elif nxt == "report":
-            state = await report(state, ctx)
-        elif nxt in _TERMINAL:
-            break
-        else:  # pragma: no cover - guard for an unrouted node name
-            state.gaps.append(f"router returned unknown node {nxt!r}; stopping.")
-            break
-    return state
+    """orchestrator (select host) -> select_analyzer(os_family) -> analyzer.analyze()."""
+    state = await orchestrator_select_host(state, ctx, target_host=target_host)
+    if not state.current_host:
+        return state  # empty case / no host discovered
+
+    analyzer = select_analyzer(host_os_family(state.hosts[state.current_host]))
+    return await analyzer.analyze(state, ctx)

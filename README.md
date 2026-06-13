@@ -78,6 +78,25 @@ python -m eval.run_case --case srl2015 \
 pytest -q                       # 62 deterministic rule/scoring tests
 ```
 
+**2b. Start from raw evidence files** — point the agent at the images and it leads the
+whole pipeline (build manifest → hash → mount → memory+disk+timeline → correlation →
+cross-host report). It auto-classifies disk vs memory and groups by host from the
+filename; everything stays under one read-only `EVIDENCE_ROOT`.
+```bash
+cd agent
+python -m eval.run_from_evidence --case srl2015 \
+  /cases/SRL-2015/xp-tdungan/xp-tdungan-c-drive/xp-tdungan-c-drive.E01 \
+  /cases/SRL-2015/xp-tdungan/xp-tdungan-memory/xp-tdungan-memory-raw.001 \
+  …(the other six files for the other three hosts)…
+# preview the plan + manifest without running:           … --dry-run
+# disambiguate a file inference is unsure about:  --host xp-tdungan disk=<path> memory=<path>
+```
+A path that is missing, or that escapes `EVIDENCE_ROOT`, is **refused** — and an image
+the filename can't classify is refused rather than guessed. On unreadable evidence the
+agent emits **zero findings and discloses every gap** (each citing a `provenance_id`),
+never a fabricated result. The GUI exposes the same thing: *"analyse these evidence
+files: …"* → `run_pipeline_from_evidence`.
+
 **3. Score it against the oracle** (the accuracy "after" report)
 ```bash
 python -m webui.scorer --case srl2015   # writes accuracy_report.md

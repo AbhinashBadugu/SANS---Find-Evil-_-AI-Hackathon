@@ -151,7 +151,7 @@ findevil-autonomous-ir/
 ```
 
 Outputs go under the **existing** case folder:
-`~/analysis/mcp-cases/cases/<case>/hosts/<host>/agent/`.
+`~/Desktop/DFIR agent/Agent analysis/cases/<case>/hosts/<host>/agent/`.
 
 ---
 
@@ -311,7 +311,7 @@ prose. It must never invent an artifact, path, hash, or `provenance_id`.
 ### Do NOT build yet
 DNS/DHCP/firewall/proxy/VPN/PCAP parsers, cloud forensics, frontend, Kubernetes,
 vector DB, LLM training/fine-tuning. (Gaps surfaced during analysis go in
-`~/analysis/mcp-cases/agent-analysis/TOOL_GAPS.md`, not into scope creep.)
+`~/Desktop/DFIR agent/Agent analysis/agent-analysis/TOOL_GAPS.md`, not into scope creep.)
 
 ---
 
@@ -364,10 +364,10 @@ A finding ships only if **all** are true:
 | Asset | Path |
 |-------|------|
 | MCP Server v1 (16 tools) | `mcp_server/` (this repo) |
-| Already-collected tool outputs (4 hosts) | `~/analysis/mcp-cases/cases/srl2015/` |
-| Provenance ledger (141 actions) | `~/analysis/mcp-cases/cases/srl2015/provenance.jsonl` |
-| Manual host analysis + method | `~/analysis/mcp-cases/agent-analysis/` |
-| Gap backlog (build-next list) | `~/analysis/mcp-cases/agent-analysis/TOOL_GAPS.md` |
+| Already-collected tool outputs (4 hosts) | `~/Desktop/DFIR agent/Agent analysis/cases/srl2015/` |
+| Provenance ledger (141 actions) | `~/Desktop/DFIR agent/Agent analysis/cases/srl2015/provenance.jsonl` |
+| Manual host analysis + method | `~/Desktop/DFIR agent/Agent analysis/agent-analysis/` |
+| Gap backlog (build-next list) | `~/Desktop/DFIR agent/Agent analysis/agent-analysis/TOOL_GAPS.md` |
 | Oracle V2 (truth) + scorer | `~/baseline-runs/scoring/{oracle_v2.json,score_baseline.py}` |
 | Baseline "before" numbers | `~/baseline-runs/BASELINE_RESULTS.md` |
 | Baseline hallucination evidence | `~/baseline-runs/baseline-accuracy-gaps/` |

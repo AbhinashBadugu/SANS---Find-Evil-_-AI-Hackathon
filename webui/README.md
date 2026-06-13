@@ -46,6 +46,8 @@ Env: `DFIR_UI_PORT` (default 8077), `DFIR_CHAT_MODEL` (default `claude-sonnet-4-
 - *"Show the cross-host campaign report."* → `get_report`
 - *"Rebuild the cross-host report with the host IPs."* → `run_cross_host` (~1s)
 - *"Re-run the full analysis on nfury."* → `run_full_pipeline` (background job)
+- *"Analyse these 8 evidence files: /cases/…E01 /cases/…001 …"* → `run_pipeline_from_evidence`
+  (builds the manifest from the paths and leads the whole pipeline; background job)
 - *"Score the agent against the oracle."* → `score_vs_oracle`
 - *"Try to delete the evidence."* → refused (architectural read-only)
 

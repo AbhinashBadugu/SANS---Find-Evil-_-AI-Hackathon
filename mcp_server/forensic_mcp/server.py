@@ -11,6 +11,7 @@ from mcp.server.fastmcp import FastMCP
 
 from forensic_mcp.schemas import (
     HashEvidenceRequest,
+    ExtractArchiveRequest,
     VolatilityPluginRequest,
     ReadArtifactRequest,
     VerifyEwfRequest,
@@ -28,6 +29,7 @@ from forensic_mcp.schemas import (
     FilterTimelineRequest,
 )
 from forensic_mcp.wrappers.hashing import hash_evidence as _hash_evidence
+from forensic_mcp.wrappers.extraction import extract_archive as _extract_archive
 from forensic_mcp.wrappers.volatility import run_volatility_plugin as _run_volatility_plugin
 from forensic_mcp.wrappers.artifacts import read_artifact as _read_artifact
 from forensic_mcp.wrappers.ewf import verify_ewf as _verify_ewf
@@ -54,6 +56,16 @@ def hash_evidence(case_id: str, host_id: str, evidence_path: str) -> dict:
     Evidence must live under EVIDENCE_ROOT. Appends one provenance line."""
     req = HashEvidenceRequest(case_id=case_id, host_id=host_id, evidence_path=evidence_path)
     return _hash_evidence(req).model_dump(mode="json")
+
+
+@mcp.tool()
+def extract_archive(case_id: str, host_id: str, archive_path: str) -> dict:
+    """Decompress an evidence archive (.7z/.zip/.gz) from EVIDENCE_ROOT into the case
+    write-area, so compressed evidence (e.g. a memory image as base-dc-memory.7z) can
+    be ingested. Read-only on the original; one provenance line. Returns the extracted
+    image path(s)."""
+    req = ExtractArchiveRequest(case_id=case_id, host_id=host_id, archive_path=archive_path)
+    return _extract_archive(req).model_dump(mode="json")
 
 
 @mcp.tool()

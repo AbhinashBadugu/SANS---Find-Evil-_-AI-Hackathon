@@ -30,7 +30,7 @@ from dfir_agent.nodes.cross_host import (  # noqa: E402
 from dfir_agent.scoring import load_provenance_index  # noqa: E402
 from dfir_agent.state import CaseState, Confidence  # noqa: E402
 
-DEFAULT_CASE_ROOT = os.path.expanduser("~/analysis/mcp-cases")
+DEFAULT_CASE_ROOT = os.path.expanduser("~/Desktop/DFIR agent/Agent analysis")
 
 
 def _patient_zero_ts(state: CaseState):

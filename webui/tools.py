@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 
 from webui import scorer  # noqa: E402
 
-CASE_ROOT = os.path.expanduser("~/analysis/mcp-cases")
+CASE_ROOT = os.path.expanduser("~/Desktop/DFIR agent/Agent analysis")
 _REPO = Path(__file__).resolve().parents[1]
 _AGENT_DIR = _REPO / "agent"
 _PY = str(_REPO / "mcp_server" / ".venv" / "bin" / "python")
@@ -250,6 +250,37 @@ def run_full_pipeline(args: dict, ctx) -> dict:
             "note": "Running in the background (minutes). Ask me to check status with the job id."}
 
 
+def run_pipeline_from_evidence(args: dict, ctx) -> dict:
+    """Give raw evidence file PATHS; the agent builds the case manifest and leads
+    the full autonomous pipeline (BACKGROUND job, minutes). Read-only and fully
+    cited. Accepts either `paths` (auto-classified & grouped by host) or `hosts`
+    (explicit {host_id: {disk, memory}}). Returns a job_id; poll check_run_status."""
+    paths = args.get("paths") or []
+    hosts = args.get("hosts") or {}
+    if not paths and not hosts:
+        return {"error": "give evidence: 'paths' (list) and/or 'hosts' ({id:{disk,memory}})."}
+
+    # Positionals FIRST (before --case) so the nargs='*' options never eat them.
+    argv = [_PY, "-m", "eval.run_from_evidence", *[str(p) for p in paths], "--case", args["case"]]
+    for host_id, spec in hosts.items():
+        part = ["--host", host_id]
+        if spec.get("disk"):
+            part.append(f"disk={spec['disk']}")
+        if spec.get("memory"):
+            part.append(f"memory={spec['memory']}")
+        argv += part
+    if args.get("evidence_root"):
+        argv += ["--evidence-root", str(args["evidence_root"])]
+    argv += _ip_args(args.get("host_ips"))
+    if args.get("only"):
+        argv += ["--only", *args["only"]]
+
+    job = ctx.jobs.launch(argv, label=f"evidence intake {args['case']}")
+    return {"launched": True, "job": job,
+            "note": "The agent is hashing, mounting, and analysing the evidence in the "
+                    "background (minutes). Ask me to check status with the job id."}
+
+
 def check_run_status(args: dict, ctx) -> dict:
     return ctx.jobs.status(args["job_id"])
 
@@ -268,6 +299,7 @@ _IMPL = {
     "score_vs_oracle": score_vs_oracle,
     "run_cross_host": run_cross_host,
     "run_full_pipeline": run_full_pipeline,
+    "run_pipeline_from_evidence": run_pipeline_from_evidence,
     "check_run_status": check_run_status,
 }
 
@@ -313,6 +345,23 @@ TOOL_SCHEMAS = [
                     "background job. Returns a job_id immediately. Optionally host_ips and a host subset 'only'.",
      "input_schema": {"type": "object", "properties": {"case": _CASE, "host_ips": {"type": "object"},
                       "only": {"type": "array", "items": {"type": "string"}}}, "required": ["case"]}},
+    {"name": "run_pipeline_from_evidence",
+     "description": "Give RAW EVIDENCE FILE PATHS and the agent leads the whole pipeline from scratch "
+                    "(hash -> mount -> memory+disk+timeline -> correlation -> cross-host report) as a "
+                    "background job (minutes). Read-only and fully cited; paths must sit under the "
+                    "evidence root. Use 'paths' for files it should auto-classify (disk vs memory) and "
+                    "group by host, or 'hosts' to map them explicitly. Returns a job_id.",
+     "input_schema": {"type": "object", "properties": {
+         "case": _CASE,
+         "paths": {"type": "array", "items": {"type": "string"},
+                   "description": "evidence files; auto-classified & grouped by host from the filename"},
+         "hosts": {"type": "object",
+                   "description": "explicit map {host_id: {disk: path, memory: path}}"},
+         "evidence_root": {"type": "string",
+                           "description": "read-only root the files live under (default: auto common parent)"},
+         "host_ips": {"type": "object"},
+         "only": {"type": "array", "items": {"type": "string"}}},
+         "required": ["case"]}},
     {"name": "check_run_status", "description": "Check a background pipeline job by id (running?, exit code, log tail).",
      "input_schema": {"type": "object", "properties": {"job_id": {"type": "string"}}, "required": ["job_id"]}},
 ]

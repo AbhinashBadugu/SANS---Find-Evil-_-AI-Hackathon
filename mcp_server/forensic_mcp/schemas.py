@@ -34,6 +34,22 @@ class HashEvidenceResponse(BaseModel):
     error: str | None = None
 
 
+class ExtractArchiveRequest(BaseToolRequest):
+    archive_path: Path
+
+
+class ExtractArchiveResponse(BaseModel):
+    status: ToolStatus
+    case_id: str
+    host_id: str
+    archive_path: Path
+    output_dir: Path | None = None
+    extracted_paths: list[str] = Field(default_factory=list)
+    primary_image: str | None = None  # largest extracted file (the disk/memory image)
+    provenance_id: str
+    error: str | None = None
+
+
 class VolatilityPluginRequest(BaseToolRequest):
     memory_image_path: Path
     plugin: str

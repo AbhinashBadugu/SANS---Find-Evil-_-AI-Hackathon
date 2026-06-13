@@ -29,6 +29,7 @@ _DEFAULT_PYTHON = _MCP_SERVER_DIR / ".venv" / "bin" / "python"
 # documentation only — the server is still the enforcement boundary.
 KNOWN_TOOLS = {
     "hash_evidence",
+    "extract_archive",
     "verify_ewf",
     "open_ewf",
     "close_ewf",
