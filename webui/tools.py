@@ -23,7 +23,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 
 from webui import scorer  # noqa: E402
 
-CASE_ROOT = os.path.expanduser("~/Desktop/DFIR agent/Agent analysis")
+# Case root is env-overridable so the UI is not bound to one machine/path and can
+# be pointed at an empty dir for a clean "nothing analyzed yet" demo slate.
+CASE_ROOT = os.path.expanduser(
+    os.getenv("DFIR_CASE_ROOT", "~/Desktop/DFIR agent/Agent analysis"))
 _REPO = Path(__file__).resolve().parents[1]
 _AGENT_DIR = _REPO / "agent"
 _PY = str(_REPO / "mcp_server" / ".venv" / "bin" / "python")

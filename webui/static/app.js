@@ -9,7 +9,6 @@ const sendBtn = $("#send");
 // Conversation state sent to the backend (Anthropic message format: text only).
 const history = [];
 let streaming = false;
-const CASE = "srl2015";
 
 // ---------- helpers ----------
 // Render markdown if the library is present; otherwise (e.g. CDN/script blocked)
@@ -133,18 +132,22 @@ function handleEvent(raw, cb) {
 
 // ---------- side report panel ----------
 async function refreshReports() {
-  // populate the picker once
-  if (picker.options.length <= 1) {
-    try {
-      const cases = await (await fetch("/api/cases")).json();
-      const c = (cases.cases || []).find((x) => x.case === CASE) || (cases.cases || [])[0];
-      if (c) {
-        addOption(`Cross-host CASE_REPORT (${c.case})`, `report:${c.case}:`);
-        for (const h of c.hosts) addOption(`Host report — ${h}`, `report:${c.case}:${h}`);
-        addOption(`★ Accuracy score vs oracle (${c.case})`, `score:${c.case}`);
-      }
-    } catch {}
-  }
+  // Populate the picker once, dynamically, from whatever cases actually exist on
+  // this workstation — no hardcoded case. If nothing is analyzed yet, the picker
+  // stays empty and the panel keeps its placeholder (nothing is pre-loaded).
+  if (picker.options.length > 1) return;
+  try {
+    const data = await (await fetch("/api/cases")).json();
+    const cases = data.cases || [];
+    if (!cases.length) return;
+    const multi = cases.length > 1;
+    for (const c of cases) {
+      const tag = multi ? ` [${c.case}]` : ` (${c.case})`;
+      if (c.has_case_report) addOption(`Cross-host CASE_REPORT${tag}`, `report:${c.case}:`);
+      for (const h of (c.hosts || [])) addOption(`Host report — ${h}${tag}`, `report:${c.case}:${h}`);
+      addOption(`★ Accuracy score vs oracle${tag}`, `score:${c.case}`);
+    }
+  } catch {}
 }
 function addOption(label, value) {
   const o = document.createElement("option"); o.value = value; o.textContent = label;
