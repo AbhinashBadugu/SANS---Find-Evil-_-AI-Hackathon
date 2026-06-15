@@ -108,6 +108,18 @@ def test_rule_flags_packed_c2_masquerade_and_caps():
     assert c2.evidence[0].provenance_id == "cmd-3"
 
 
+def test_rule_handles_empty_pdb_paths_without_crashing():
+    # Regression: extract_pdb_paths returning {"pdb_paths": []} must not IndexError.
+    findings = pe_indicator_findings(
+        host_id="h1", file_path=r"\Windows\system32\dllhost\x.exe",
+        pe={"is_pe": True, "provenance_id": "cmd-1", "suspicious_imports": [], "pdb_path": None},
+        pdb={"pdb_paths": [], "provenance_id": "cmd-2"},
+        embedded={"urls": [], "ips": []},
+    )
+    assert isinstance(findings, list)  # no exception; masquerade still flagged
+    assert any(f.category == "masquerade_path" for f in findings)
+
+
 def test_rule_signed_location_downgrades_pyinstaller():
     findings = pe_indicator_findings(
         host_id="h1", file_path=r"C:\Program Files\Vendor\app.exe",

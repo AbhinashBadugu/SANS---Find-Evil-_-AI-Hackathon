@@ -16,6 +16,16 @@ from ..state import Confidence, EvidenceReference, Finding
 
 # A system executable living in a fake child dir of system32 — the masquerade trick.
 _MASQUERADE = re.compile(r"\\system32\\[^\\]+\\[^\\]+\.exe$", re.IGNORECASE)
+# Legit system32 child directories (so the real cached/system copies aren't called
+# masquerades). A genuine masquerade uses a FAKE subdir, e.g. system32\dllhost\.
+_LEGIT_SYS_SUBDIR = re.compile(
+    r"\\system32\\(dllcache|wbem|drivers|driverstore|ras|spool|tasks|config|"
+    r"microsoft|inetsrv|oobe|mui|wins|com|catroot|catroot2|migration|sysprep|"
+    r"icsxml|npp|wdi|winevt|logfiles|dhcp|en-us|[a-z]{2}-[a-z]{2})\\", re.IGNORECASE)
+
+
+def _is_masquerade(path: str) -> bool:
+    return bool(_MASQUERADE.search(path)) and not _LEGIT_SYS_SUBDIR.search(path)
 _WININET = ("internetopen", "httpsendrequest", "internetconnect", "internetreadfile")
 _INJECTION = ("virtualallocex", "writeprocessmemory", "createremotethread",
               "ntmapviewofsection", "queueuserapc", "setthreadcontext")
@@ -34,7 +44,7 @@ def pe_indicator_findings(*, host_id: str, file_path: str, pe: dict | None = Non
                           pdb: dict | None = None, id_start: int = 1) -> list[Finding]:
     findings: list[Finding] = []
     n = id_start
-    masquerade = bool(_MASQUERADE.search((file_path or "").replace("/", "\\")))
+    masquerade = _is_masquerade((file_path or "").replace("/", "\\"))
     benign_loc = is_benign_location(file_path)
 
     def emit(prov, title, category, desc, conf, tags, mitre, tool, record=None):
@@ -103,7 +113,6 @@ def pe_indicator_findings(*, host_id: str, file_path: str, pe: dict | None = Non
                  Confidence.likely, ["masquerade"], ["T1036.005"], "extract_pe_metadata")
 
     # 5) PDB build-path attribution (custom, non-Microsoft).
-    pdb_path = (pe or {}).get("pdb_path") or (pdb or {}).get("pdb_paths", [None])[0] if (pe or pdb) else None
     pdb_list = []
     if pe and pe.get("pdb_path"):
         pdb_list.append((pe["pdb_path"], pe.get("provenance_id"), "extract_pe_metadata"))

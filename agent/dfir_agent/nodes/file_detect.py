@@ -30,10 +30,19 @@ from . import NodeContext
 
 csv.field_size_limit(min(2**31 - 1, sys.maxsize))
 
-_JAVA_CACHE = re.compile(r"appdata/locallow/sun/java/deployment/cache", re.IGNORECASE)
+# Java Deployment cache location differs by OS: Win7+ uses AppData\LocalLow;
+# Windows XP/2003 uses "Application Data\Sun\Java\Deployment\cache".
+_JAVA_CACHE = re.compile(r"(appdata/locallow|application data)/sun/java/deployment/cache",
+                         re.IGNORECASE)
 _MASQ_OR_STAGE = re.compile(
     r"(\\system32\\[^\\]+\\[^\\]+\.exe$|\\(temp|tmp|users\\public|programdata|"
     r"appdata\\local\\temp|windows\\temp|\$recycle\.bin)\\)", re.IGNORECASE)
+# Legit system32 child dirs (e.g. dllcache mirrors system32) — don't treat their
+# cached copies as suspect. A real masquerade lives in a FAKE subdir (dllhost).
+_LEGIT_SYS_SUBDIR = re.compile(
+    r"\\system32\\(dllcache|wbem|drivers|driverstore|ras|spool|tasks|config|"
+    r"microsoft|inetsrv|oobe|mui|wins|com|catroot|catroot2|migration|sysprep|"
+    r"winevt|logfiles|dhcp|en-us|[a-z]{2}-[a-z]{2})\\", re.IGNORECASE)
 _EXE = re.compile(r"\.(exe|scr|dll)$", re.IGNORECASE)
 _CAP_EXE = 40
 
@@ -65,7 +74,7 @@ def _derive_targets(mft_csv: str) -> dict[str, list]:
                 java.append(full)
             elif name.lower().endswith(".reg"):
                 reg.append(full)
-            elif _EXE.search(name) and _MASQ_OR_STAGE.search(low):
+            elif _EXE.search(name) and _MASQ_OR_STAGE.search(low) and not _LEGIT_SYS_SUBDIR.search(low):
                 if len(exes) < _CAP_EXE:
                     exes.append(full)
                 drops.append(rec)
@@ -103,26 +112,33 @@ async def run_file_detections(state: CaseState, ctx: NodeContext, host, ewf1: st
                                                  provenance_id=jprov)
 
     # --- suspect executables: PE metadata / strings / pyinstaller / pdb / urls + hash ---
+    # Per-file try/except: a single bad binary must never abort the whole pass.
     for orig in targets["exes"]:
         cp = carved.get(orig)
         if not cp:
             continue
-        pe = await _call(state, ctx, host, "extract_pe_metadata", file_path=cp)
-        pyi = await _call(state, ctx, host, "detect_pyinstaller", file_path=cp)
-        urls = await _call(state, ctx, host, "extract_embedded_urls", file_path=cp)
-        pdb = await _call(state, ctx, host, "extract_pdb_paths", file_path=cp)
-        await _call(state, ctx, host, "hash_file", file_path=cp)  # writes per-host manifest
-        new += pe_indicator_findings(host_id=host.host_id, file_path=orig,
-                                     pe=pe, pyinstaller=pyi, embedded=urls, pdb=pdb)
+        try:
+            pe = await _call(state, ctx, host, "extract_pe_metadata", file_path=cp)
+            pyi = await _call(state, ctx, host, "detect_pyinstaller", file_path=cp)
+            urls = await _call(state, ctx, host, "extract_embedded_urls", file_path=cp)
+            pdb = await _call(state, ctx, host, "extract_pdb_paths", file_path=cp)
+            await _call(state, ctx, host, "hash_file", file_path=cp)  # writes per-host manifest
+            new += pe_indicator_findings(host_id=host.host_id, file_path=orig,
+                                         pe=pe, pyinstaller=pyi, embedded=urls, pdb=pdb)
+        except Exception as e:  # noqa: BLE001
+            state.gaps.append(f"{host.host_id}: PE detection on {orig} failed ({type(e).__name__}); skipped.")
 
     # --- registry C2 config from carved .reg exports ---
     for orig in targets["reg"]:
         cp = carved.get(orig)
         if not cp:
             continue
-        rr = await _call(state, ctx, host, "parse_reg_export", reg_path=cp)
-        new += suspicious_registry_c2(rr.get("entries") or [], host_id=host.host_id,
-                                      provenance_id=rr.get("provenance_id", carve_prov))
+        try:
+            rr = await _call(state, ctx, host, "parse_reg_export", reg_path=cp)
+            new += suspicious_registry_c2(rr.get("entries") or [], host_id=host.host_id,
+                                          provenance_id=rr.get("provenance_id", carve_prov))
+        except Exception as e:  # noqa: BLE001
+            state.gaps.append(f"{host.host_id}: registry C2 parse on {orig} failed ({type(e).__name__}); skipped.")
 
     state.findings.extend(new)
     ctx.decisions.record(
