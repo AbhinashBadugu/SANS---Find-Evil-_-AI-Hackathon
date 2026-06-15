@@ -11,6 +11,7 @@ the target first.
 """
 
 import csv as _csv
+import fcntl
 import os
 import sys as _sys
 from datetime import date
@@ -115,28 +116,35 @@ def filter_timeline(req: FilterTimelineRequest) -> FilterTimelineResponse:
     # slicing per anchor dir — which filled the disk and stalled the run. The full
     # CSV is now keyed to the plaso store (one per host), not to req.label.
     full_csv = dirs["timeline"] / f"_timeline_full__{plaso.stem}.csv"
-    if full_csv.exists() and full_csv.stat().st_size > 0:
-        # Reuse the cached full export. Log the in-process reuse so this call's
-        # provenance_id still resolves for citations (no redundant psort, no shell).
-        log_action(
-            provenance_id=provenance_id, case_id=req.case_id, host_id=req.host_id,
-            tool_name="psort", wrapper_name="filter_timeline",
-            command=["psort.py", "-q", "-o", "l2tcsv", "-w", str(full_csv), str(plaso),
-                     "# reused cached full export (no re-run)"],
-            input_paths=[plaso], output_paths=[full_csv], status="success",
-        )
-    else:
-        if full_csv.exists():
-            full_csv.unlink()  # remove a partial leftover; psort refuses to overwrite
-        result = run_logged_command(
-            provenance_id=provenance_id, case_id=req.case_id, host_id=req.host_id,
-            tool_name="psort", wrapper_name="filter_timeline",
-            command=["psort.py", "-q", "-o", "l2tcsv", "-w", str(full_csv), str(plaso)],
-            input_paths=[plaso], output_paths=[full_csv], timeout_seconds=7200,
-        )
-        if result.status != "success" or not full_csv.exists():
-            return FilterTimelineResponse(status=ToolStatus.failed, case_id=req.case_id, host_id=req.host_id,
-                                          provenance_id=provenance_id, error=result.error or "psort produced no CSV")
+    lock_path = dirs["timeline"] / f"_timeline_full__{plaso.stem}.lock"
+    # Serialize the one-time build: concurrent filter_timeline calls for the same
+    # host must not both run psort to the same path (that races and corrupts the
+    # CSV). The first caller holds the lock and builds it; the rest block, then
+    # fall through to reuse. The lock is released when the with-block closes the fd.
+    with open(lock_path, "w") as _lock:
+        fcntl.flock(_lock, fcntl.LOCK_EX)
+        if full_csv.exists() and full_csv.stat().st_size > 0:
+            # Reuse the cached full export. Log the in-process reuse so this call's
+            # provenance_id still resolves for citations (no redundant psort, no shell).
+            log_action(
+                provenance_id=provenance_id, case_id=req.case_id, host_id=req.host_id,
+                tool_name="psort", wrapper_name="filter_timeline",
+                command=["psort.py", "-q", "-o", "l2tcsv", "-w", str(full_csv), str(plaso),
+                         "# reused cached full export (no re-run)"],
+                input_paths=[plaso], output_paths=[full_csv], status="success",
+            )
+        else:
+            if full_csv.exists():
+                full_csv.unlink()  # remove a partial leftover; psort refuses to overwrite
+            result = run_logged_command(
+                provenance_id=provenance_id, case_id=req.case_id, host_id=req.host_id,
+                tool_name="psort", wrapper_name="filter_timeline",
+                command=["psort.py", "-q", "-o", "l2tcsv", "-w", str(full_csv), str(plaso)],
+                input_paths=[plaso], output_paths=[full_csv], timeout_seconds=7200,
+            )
+            if result.status != "success" or not full_csv.exists():
+                return FilterTimelineResponse(status=ToolStatus.failed, case_id=req.case_id, host_id=req.host_id,
+                                              provenance_id=provenance_id, error=result.error or "psort produced no CSV")
 
     full_rows = sum(1 for _ in full_csv.open(encoding="utf-8", errors="replace")) - 1
 
