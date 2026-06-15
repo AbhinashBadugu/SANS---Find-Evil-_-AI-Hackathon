@@ -28,3 +28,4 @@ webui/_server.log
 # OS
 .DS_Store
 .pytest_cache/
+webui/_live_server.log

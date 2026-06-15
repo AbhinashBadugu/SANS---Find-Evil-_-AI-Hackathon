@@ -1,0 +1,63 @@
+# Find Evil — Autonomous DFIR Agent : Python dependencies
+# Verified working set (pip freeze) for Python 3.10+ on Ubuntu / SANS SIFT.
+# Install:  python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+# (or just run ./install.sh, which does this plus config + a smoke test).
+#
+# NOTE: the forensic tools themselves (Volatility 3, Plaso/log2timeline/psort,
+# The Sleuth Kit, ewf-tools, bulk_extractor, YARA, EZ Tools via .NET) are SYSTEM
+# binaries, not pip packages — they ship with SANS SIFT. install.sh checks for them.
+
+# --- core: MCP server + Anthropic agent ---
+anthropic==0.109.1
+mcp==1.27.2
+pydantic==2.13.4
+pydantic-settings==2.14.1
+pydantic_core==2.46.4
+PyYAML==6.0.3
+pefile==2024.8.26
+python-dotenv==1.2.2
+
+# --- web UI (Starlette + SSE) ---
+starlette==1.3.0
+uvicorn==0.49.0
+sse-starlette==3.4.4
+python-multipart==0.0.32
+anyio==4.13.0
+
+# --- tests ---
+pytest==9.0.3
+
+# --- transitive (pinned for reproducibility) ---
+annotated-doc==0.0.4
+annotated-types==0.7.0
+attrs==26.1.0
+certifi==2026.5.20
+cffi==2.0.0
+click==8.4.1
+cryptography==48.0.1
+distro==1.9.0
+docstring_parser==0.18.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+httpx-sse==0.4.3
+idna==3.18
+iniconfig==2.3.0
+jiter==0.15.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+markdown-it-py==4.2.0
+mdurl==0.1.2
+packaging==26.2
+pluggy==1.6.0
+pycparser==3.0
+Pygments==2.20.0
+PyJWT==2.13.0
+referencing==0.37.0
+rich==15.0.0
+rpds-py==2026.5.1
+shellingham==1.5.4
+sniffio==1.3.1
+typer==0.26.7
+typing-inspection==0.4.2
+typing_extensions==4.15.0

@@ -11,6 +11,7 @@ the target first.
 """
 
 import csv as _csv
+import os
 import sys as _sys
 from datetime import date
 from pathlib import Path
@@ -22,7 +23,7 @@ _csv.field_size_limit(min(2**31 - 1, _sys.maxsize))
 from forensic_mcp.config import PLASO_PARSERS
 from forensic_mcp.executor import run_logged_command
 from forensic_mcp.paths import ensure_host_dirs, ensure_inside_case, ensure_inside_evidence
-from forensic_mcp.provenance import next_provenance_id
+from forensic_mcp.provenance import log_action, next_provenance_id
 from forensic_mcp.schemas import (
     GenerateTimelineRequest, GenerateTimelineResponse,
     FilterTimelineRequest, FilterTimelineResponse, ToolStatus,
@@ -51,8 +52,25 @@ def generate_timeline(req: GenerateTimelineRequest) -> GenerateTimelineResponse:
                                         provenance_id=provenance_id, error=f"Source not found: {source}")
 
     plaso = dirs["timeline"] / f"{req.host_id}.plaso"
+    # RESUME: log2timeline is the ~30-min step. If a complete .plaso for this host
+    # already exists, reuse it instead of rebuilding, so a re-run skips hosts that
+    # were already timelined. Set DFIR_FORCE_TIMELINE_REBUILD=1 to force a clean
+    # rebuild. The reuse is logged in-process so the provenance_id still resolves.
+    if (plaso.exists() and plaso.stat().st_size > 0
+            and os.getenv("DFIR_FORCE_TIMELINE_REBUILD") != "1"):
+        log_action(
+            provenance_id=provenance_id, case_id=req.case_id, host_id=req.host_id,
+            tool_name="log2timeline", wrapper_name="generate_timeline",
+            command=["log2timeline.py", "--storage_file", str(plaso), str(source),
+                     "# reused existing store (no rebuild)"],
+            input_paths=[source], output_paths=[plaso], status="success",
+        )
+        return GenerateTimelineResponse(
+            status=ToolStatus.success, case_id=req.case_id, host_id=req.host_id,
+            plaso_path=plaso, provenance_id=provenance_id,
+        )
     if plaso.exists():
-        plaso.unlink()  # log2timeline appends to an existing store; start clean
+        plaso.unlink()  # partial/empty leftover; log2timeline appends, so start clean
 
     result = run_logged_command(
         provenance_id=provenance_id, case_id=req.case_id, host_id=req.host_id,
@@ -91,19 +109,34 @@ def filter_timeline(req: FilterTimelineRequest) -> FilterTimelineResponse:
         return FilterTimelineResponse(status=ToolStatus.failed, case_id=req.case_id, host_id=req.host_id,
                                       provenance_id=provenance_id, error=f"Plaso store not found: {plaso}")
 
-    full_csv = dirs["timeline"] / f"{req.label}_full.csv"
-    if full_csv.exists():
-        full_csv.unlink()  # psort refuses to overwrite
-
-    result = run_logged_command(
-        provenance_id=provenance_id, case_id=req.case_id, host_id=req.host_id,
-        tool_name="psort", wrapper_name="filter_timeline",
-        command=["psort.py", "-q", "-o", "l2tcsv", "-w", str(full_csv), str(plaso)],
-        input_paths=[plaso], output_paths=[full_csv], timeout_seconds=7200,
-    )
-    if result.status != "success" or not full_csv.exists():
-        return FilterTimelineResponse(status=ToolStatus.failed, case_id=req.case_id, host_id=req.host_id,
-                                      provenance_id=provenance_id, error=result.error or "psort produced no CSV")
+    # PERF: psort's full l2tcsv export of a Plaso store is identical for every slice
+    # of the same host, so export it ONCE and reuse it. This used to re-run psort (a
+    # ~1.6 GB export) on EVERY filter_timeline call — hundreds of times per host when
+    # slicing per anchor dir — which filled the disk and stalled the run. The full
+    # CSV is now keyed to the plaso store (one per host), not to req.label.
+    full_csv = dirs["timeline"] / f"_timeline_full__{plaso.stem}.csv"
+    if full_csv.exists() and full_csv.stat().st_size > 0:
+        # Reuse the cached full export. Log the in-process reuse so this call's
+        # provenance_id still resolves for citations (no redundant psort, no shell).
+        log_action(
+            provenance_id=provenance_id, case_id=req.case_id, host_id=req.host_id,
+            tool_name="psort", wrapper_name="filter_timeline",
+            command=["psort.py", "-q", "-o", "l2tcsv", "-w", str(full_csv), str(plaso),
+                     "# reused cached full export (no re-run)"],
+            input_paths=[plaso], output_paths=[full_csv], status="success",
+        )
+    else:
+        if full_csv.exists():
+            full_csv.unlink()  # remove a partial leftover; psort refuses to overwrite
+        result = run_logged_command(
+            provenance_id=provenance_id, case_id=req.case_id, host_id=req.host_id,
+            tool_name="psort", wrapper_name="filter_timeline",
+            command=["psort.py", "-q", "-o", "l2tcsv", "-w", str(full_csv), str(plaso)],
+            input_paths=[plaso], output_paths=[full_csv], timeout_seconds=7200,
+        )
+        if result.status != "success" or not full_csv.exists():
+            return FilterTimelineResponse(status=ToolStatus.failed, case_id=req.case_id, host_id=req.host_id,
+                                          provenance_id=provenance_id, error=result.error or "psort produced no CSV")
 
     full_rows = sum(1 for _ in full_csv.open(encoding="utf-8", errors="replace")) - 1
 
