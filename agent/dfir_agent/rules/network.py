@@ -7,8 +7,9 @@ public foreign connection ONLY when its owning process is either
   (a) already suspicious — a PID/name a memory rule already flagged, or
   (b) a core OS process that must never originate outbound internet traffic
       (System, smss, csrss, wininit, services).
-That keeps spinlock.exe → 199.73.28.114 and System → httppump C2 while leaving
-Skype and the adjudicated-benign usboesrv alone.
+That keeps a packed implant → its public C2, and a core OS process → unexpected
+outbound C2, while leaving benign user apps and adjudicated-benign vendor
+services alone.
 
 Each finding is keyed by pid so correlation fuses it with the process finding,
 adding the strong `network` evidence family (so a flagged process that also beacons

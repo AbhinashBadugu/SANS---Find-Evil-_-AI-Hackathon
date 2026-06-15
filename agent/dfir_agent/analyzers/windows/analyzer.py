@@ -13,6 +13,7 @@ from ...nodes.correlation import correlation
 from ...nodes.dc_identity import dc_identity
 from ...nodes.disk import disk
 from ...nodes.disk_recheck import disk_recheck
+from ...nodes.deep_scan import deep_scan
 from ...nodes.intake import intake
 from ...nodes.memory import memory
 from ...nodes.orchestrator import route_next
@@ -49,6 +50,8 @@ class WindowsAnalyzer(Analyzer):
                 state = await disk(state, ctx)
             elif nxt == "timeline":
                 state = await timeline(state, ctx)
+            elif nxt == "deep_scan":
+                state = await deep_scan(state, ctx)
             elif nxt == "dc_identity":
                 state = await dc_identity(state, ctx)
             elif nxt == "disk_recheck":

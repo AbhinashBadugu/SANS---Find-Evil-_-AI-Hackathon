@@ -1,7 +1,7 @@
 """Timeline extraction rules over a Plaso l2tcsv slice (playbook §7, family=timeline).
 
 The trap this rule exists to avoid: an implant's $STANDARD_INFORMATION timestamps
-are timestomped (on xp-tdungan, backdated to 2003-03-31), so the naive "earliest
+are timestomped (e.g. backdated by years), so the naive "earliest
 event" would mis-report the compromise time. The trustworthy creation time is the
 $FILE_NAME (FN) attribute, which ordinary tooling cannot backdate. This rule
 prefers FN-creation to pin patient-zero timing, and emits the SI backdating as its

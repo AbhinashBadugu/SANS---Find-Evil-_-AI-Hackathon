@@ -1,0 +1,4 @@
+# SRL-2015 case IOCs (case DATA). These exist ONLY for enrichment/validation and
+# are NEVER imported by detection rules. The authoritative answer key with full
+# milestones lives in agent/validation_profiles/srl2015.yml.
+note: "Authoritative IOC set = validation_profiles/srl2015.yml (forbidden_in_core + milestones)."

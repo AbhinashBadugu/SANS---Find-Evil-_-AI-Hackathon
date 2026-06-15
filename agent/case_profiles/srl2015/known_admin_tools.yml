@@ -1,0 +1,10 @@
+# SRL-2015 legitimate admin / 3rd-party software (case DATA, not logic).
+# These substrings, matched against service names/binaries, mark a service as
+# benign. This is where the previously hard-coded usboesrv hint now lives —
+# moved out of core (rules/dc_events.py) per the no-IOCs-in-core rule.
+benign_service_hints:
+  - usboesrv          # KernelPro "USB over Ethernet" service
+  - usboe
+  - kernelpro
+admin_tools:
+  - "usb over ethernet"

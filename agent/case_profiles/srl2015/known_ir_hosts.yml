@@ -1,0 +1,5 @@
+# SRL-2015 incident-response / acquisition infrastructure (case DATA, not logic).
+# A source IP listed here is examiner activity, not the attacker — findings that
+# rest solely on it are self-corrected (demoted), with provenance retained.
+ir_hosts:
+  "10.3.16.5": "Incident-response / examiner host (F-Response iSCSI + RDP)"

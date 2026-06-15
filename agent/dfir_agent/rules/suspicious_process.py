@@ -1,8 +1,8 @@
 """Process-anomaly rules driven off windows.pslist (playbook §7.4).
 
-The masquerade rule catches the tdungan implant from pslist ALONE: a core
-Windows service host (`svchost.exe`) is, on a real system, always a direct child
-of `services.exe`. PID 3296 on xp-tdungan is a child of `explorer.exe` (1900) —
+The masquerade rule catches an implant from pslist ALONE: a core Windows service
+host (`svchost.exe`) is, on a real system, always a direct child of
+`services.exe`. A `svchost.exe` whose parent is `explorer.exe` (a user shell) is
 a parent-process anomaly. That is deterministic, citable, and needs no LLM.
 
 A second, independent signal (the non-standard image path

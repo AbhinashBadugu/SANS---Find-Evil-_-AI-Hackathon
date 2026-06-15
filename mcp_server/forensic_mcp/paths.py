@@ -44,6 +44,21 @@ def ensure_inside_case(path: Path) -> Path:
     return _ensure_inside(CASE_ROOT, Path(path))
 
 
+def ensure_readable(path: Path) -> Path:
+    """An input path we are allowed to READ: a sealed original under EVIDENCE_ROOT,
+    OR a working copy we already produced under CASE_ROOT (an extracted archive, a
+    carved file, or a read-only NTFS mount). READ-only — callers must never modify
+    what it returns. This is the gate for tools that consume files the agent itself
+    extracted/mounted (hashing, PE/string parsing, registry exports), while still
+    refusing any path outside BOTH roots.
+    """
+    p = Path(path)
+    try:
+        return _ensure_inside(EVIDENCE_ROOT, p)
+    except PathValidationError:
+        return _ensure_inside(CASE_ROOT, p)
+
+
 def case_dir(case_id: str) -> Path:
     validate_id(case_id, "case_id")
     return ensure_inside_case(CASE_ROOT / "cases" / case_id)

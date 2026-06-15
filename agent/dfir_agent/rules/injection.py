@@ -5,9 +5,9 @@ lsass, McAfee components). The discriminator that removes the noise is simple an
 deterministic: a region that is **PrivateMemory + PAGE_EXECUTE_READWRITE + starts
 with an `MZ` header** is an injected PE image, not an AV stub.
 
-On xp-tdungan that filter flags PID 3296 (the implant) — and ONLY 3296 — across
-105 regions, with zero false positives. (It also corrects the manual analyst's
-note that "malfind did not catch the implant": the raw evidence shows it did.)
+In practice that filter flags only the genuinely injected PID(s) out of many
+noisy RWX regions, with zero false positives — an MZ-in-private-RWX region is an
+injected PE image, not an AV stub.
 """
 
 from __future__ import annotations

@@ -144,6 +144,8 @@ def route_next(state: CaseState) -> str:
     host = state.hosts.get(state.current_host or "")
     if host and host.role == HostRole.dc and "dc_identity" not in done:
         return "dc_identity"  # not yet implemented (Phase 7) — router is ready for it
+    if "deep_scan" not in done:
+        return "deep_scan"  # expanded detection: credential access, lateral graph, self-correction
     if "correlation" not in done:
         return "correlation"  # first pass: fuse, score, detect contradictions, maybe request re-check
     # Self-correction loop (capped to one round): correlation -> disk_recheck -> correlation.

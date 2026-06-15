@@ -4,9 +4,9 @@ A single installer landing in one user's Temp is unremarkable. The SAME executab
 dropped into *several different users'* Temp directories is not — that is a payload
 being pushed across profiles (mass deployment, often via a stolen domain-admin
 account). This rule groups Temp-resident .exe files by name and flags any name that
-appears in >=2 distinct user profiles. On SRL-2015 this surfaces exactly `a.exe`
-(the httppump dropper) across tdungan/RSydow/vibranium/SRL-Helpdesk — and nothing
-else, because no benign installer is named identically across multiple profiles.
+appears in >=2 distinct user profiles — and nothing else, because no benign
+installer is named identically across multiple unrelated user profiles (that
+cross-profile spread is the signature of a payload pushed via stolen creds).
 """
 
 from __future__ import annotations
@@ -98,8 +98,9 @@ def detect_temp_executed_payloads(
 ) -> list[Finding]:
     """An .exe dropped in a Temp dir AND confirmed executed by a Prefetch entry is a
     run dropped payload — the strongest single-host dropper signal (no multi-profile
-    requirement). On SRL-2015 this surfaces a.exe and the Java-exploit payload
-    pkxezy1tji98.exe, and nothing benign (installers are name-allowlisted)."""
+    requirement). It surfaces Temp-resident executables that were actually executed
+    (e.g. browser/Java-delivered payloads), and nothing benign (installers are
+    name-allowlisted)."""
     from pathlib import Path
     p = Path(mft_csv)
     if not p.exists():

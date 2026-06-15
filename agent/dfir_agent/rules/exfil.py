@@ -4,7 +4,7 @@ The disk_artifacts rules only check files memory already named. This rule scans 
 full MFT for the OTHER half of an intrusion: data collected into an archive for
 exfiltration. It flags archive files that are either in a staging location (Temp,
 Users\\Public, ProgramData, Recycle Bin) or unusually large — the classic
-"rar a -hp<pwd> system4.rar <collected files>" pattern. A small zip in a user's
+"rar a -hp<pwd> <archive>.rar <collected files>" staging pattern. A small zip in a user's
 Documents folder is NOT flagged (anti-FP).
 """
 

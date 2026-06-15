@@ -28,6 +28,7 @@ from dfir_agent.nodes.cross_host import (  # noqa: E402
     HostBundle, correlate_cross_host, lint_cross_host, render_case_report,
 )
 from dfir_agent.scoring import load_provenance_index  # noqa: E402
+from dfir_agent.rules.hash_correlation import findings_from_hash_groups  # noqa: E402
 from dfir_agent.state import CaseState, Confidence  # noqa: E402
 
 DEFAULT_CASE_ROOT = os.path.expanduser("~/Desktop/DFIR agent/Agent analysis")
@@ -63,12 +64,49 @@ def _load_cached_bundles(case_root: str, case_id: str, manifest, only, ip_map) -
     return bundles
 
 
+def _shared_binaries_by_hash(case_root: str, case_id: str) -> list:
+    """Group every hashed file across hosts by sha256; return shared-binary findings
+    (sha256 on >=2 hosts) from the per-host hash manifests file_detect wrote."""
+    from collections import defaultdict
+    case_dir = Path(case_root) / "cases" / case_id
+    groups: dict[str, dict] = defaultdict(lambda: {"hosts": set(), "paths": [], "prov": [], "size": None})
+    for manifest in sorted(case_dir.glob("hosts/*/hashes/hash_manifest.jsonl")):
+        for line in manifest.open("r", encoding="utf-8"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            sha = (rec.get("hashes") or {}).get("sha256")
+            if not sha:
+                continue
+            g = groups[sha]
+            g["hosts"].add(rec.get("host_id"))
+            g["paths"].append(rec.get("path"))
+            g["prov"].append(rec.get("provenance_id"))
+            g["size"] = rec.get("size")
+    shared = [{"sha256": sha, "size": g["size"], "hosts": sorted(h for h in g["hosts"] if h),
+               "paths": g["paths"], "provenance_ids": [p for p in g["prov"] if p]}
+              for sha, g in groups.items() if len({h for h in g["hosts"] if h}) >= 2]
+    return findings_from_hash_groups(shared)
+
+
 def _emit_cross_host(case_id: str, case_root: str, bundles: list[HostBundle],
                      ip_map: dict[str, str]) -> dict:
     xh = correlate_cross_host(case_id, bundles, ip_map=ip_map or {})
     prov_index = load_provenance_index(case_root, case_id)
     lint = lint_cross_host(xh, prov_index)
     md = render_case_report(xh, bundles, prov_index)
+
+    # Cross-host shared binaries (same sha256 on >=2 hosts) from the hash manifests.
+    shared_bins = _shared_binaries_by_hash(case_root, case_id)
+    if shared_bins:
+        md += f"\n\n## Shared binaries across hosts by hash ({len(shared_bins)})\n\n"
+        for f in shared_bins:
+            md += f"- {f.title}  ·  {', '.join(e.provenance_id for e in f.evidence[:4])}\n"
+
     report_path = Path(case_root) / "cases" / case_id / "CASE_REPORT.md"
     report_path.write_text(md, encoding="utf-8")
     print(f"\n>>> CROSS-HOST: patient_zero={xh.case_patient_zero_host} "
@@ -85,6 +123,7 @@ def _emit_cross_host(case_id: str, case_root: str, bundles: list[HostBundle],
         ],
         "lateral_hops": len(xh.lateral_chain),
         "spread_edges": len(xh.spread_edges),
+        "shared_binaries_by_hash": len(shared_bins),
         "gaps": xh.gaps,
     }
 

@@ -9,6 +9,8 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",
     "mcp>=1.0",
+    "pyyaml>=6.0",   # validation profiles + case-config enrichment (eval/score_profile, profiles)
+    "pefile>=2024.0",  # PE metadata parsing (extract_pe_metadata); pure-python, optional at runtime
 ]
 
 [project.optional-dependencies]

@@ -2,8 +2,8 @@
 
 A system file in a standard, signed location (e.g. a WinSxS component like
 `6.1.7600.16385`) is NOT malware unless an independent strong source contradicts
-it. This rule is what kills the baseline's `wceisvista.inf` hallucination, and it
-is mandatory once Phase 5 (correlation) lands.
+it. This rule is what kills the "a signed Windows INF/component is malware" class
+of hallucination, and it is mandatory once Phase 5 (correlation) lands.
 
 Phase 1 only needs the predicate; the correlation node calls it before promoting
 anything to `confirmed`. Kept deliberately conservative: it allowlists *locations*
@@ -53,8 +53,8 @@ def looks_like_signed_component(text: str | None) -> bool:
 # found only in signed Windows locations, is a legitimate file — its *runtime*
 # behaviour may still be suspicious, but the binary itself must not be called
 # malware. (This is the discriminator that keeps a hidden cmd.exe shell from being
-# mislabeled an implant, and that would kill the baseline's wceisvista.inf-style
-# "built-in file = malware" error.)
+# mislabeled an implant, and that would kill the "built-in signed file = malware"
+# error.)
 BENIGN_WINDOWS_BINARIES = {
     "cmd.exe", "conhost.exe", "svchost.exe", "services.exe", "lsass.exe", "lsm.exe",
     "csrss.exe", "winlogon.exe", "wininit.exe", "smss.exe", "explorer.exe",

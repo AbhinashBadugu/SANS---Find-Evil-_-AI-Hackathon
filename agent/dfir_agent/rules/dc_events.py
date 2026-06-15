@@ -19,6 +19,7 @@ import json
 import sys
 from collections import defaultdict
 
+from ..enrichment import benign_service_hints
 from ..state import Confidence, EvidenceReference, Finding
 
 csv.field_size_limit(min(2**31 - 1, sys.maxsize))
@@ -29,7 +30,9 @@ _SUSPICIOUS_SERVICES = {
     "psexesvc": ("lateral_movement", "PsExec service binary — remote command execution"),
     "mnemosyne": ("suspicious_driver", "Mnemosyne kernel driver — uncommon, attacker-associated"),
 }
-_BENIGN_SERVICE_HINTS = ("f-response", "fresponse", "fresdisk", "kernelpro", "usboe", "usboesrv")
+# Benign service hints come from the case profile (known_admin_tools.yml) plus the
+# generic IR-tooling defaults in enrichment.GENERIC_BENIGN_SERVICE_HINTS — NOT
+# hard-coded here, so no case-specific tool name lives in core (see enrichment.py).
 
 _LOCAL_IPS = {"-", "", "127.0.0.1", "::1", "?"}
 _SYSTEM_ACCOUNTS = {"system", "local service", "network service", "-", ""}
@@ -102,7 +105,7 @@ def analyze_dc_events(
         low = (name + " " + " ".join(r[1] for r in rows)).lower()
         klass = next((v for k, v in _SUSPICIOUS_SERVICES.items() if k in low), None)
         if klass is None:
-            if any(h in low for h in _BENIGN_SERVICE_HINTS):
+            if any(h in low for h in benign_service_hints()):
                 notes.append(f"benign service install classified out: '{name}' ({rows[0][1]})")
             else:
                 notes.append(f"service install (unclassified, left as note): '{name}' ({rows[0][1]})")

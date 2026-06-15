@@ -66,7 +66,7 @@ class ImplantPresence(BaseModel):
 
 
 class SharedImplant(BaseModel):
-    key: str  # normalized implant basename, e.g. "spinlock.exe"
+    key: str  # normalized implant basename (a shared malware filename)
     label: str  # most-confident host's title
     hosts: list[ImplantPresence] = Field(default_factory=list)
 

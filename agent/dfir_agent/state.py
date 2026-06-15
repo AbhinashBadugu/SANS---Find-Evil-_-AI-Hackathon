@@ -597,6 +597,9 @@ class CaseState(BaseModel):
     iteration: int = 0
     max_iterations: int = 12
 
+    # Deep-scan node output (lateral-movement graph for the report).
+    lateral_graph: dict | None = None
+
     # Report node outputs (Phase 6).
     report_path: str | None = None
     report_lint: dict = Field(default_factory=dict)

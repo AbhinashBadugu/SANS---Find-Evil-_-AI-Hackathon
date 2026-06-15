@@ -1,7 +1,7 @@
 """Contradiction detection (playbook §7.5).
 
 A Contradiction is emitted when two sources disagree about the same fact and the
-disagreement is resolved deterministically. The clearest case on xp-tdungan is a
+disagreement is resolved deterministically. The clearest case is a
 timestomp: the file's $STANDARD_INFORMATION creation time disagrees with its
 $FILE_NAME creation time. The resolution is fixed by NTFS semantics — $FILE_NAME
 cannot be backdated by ordinary tooling, so it is authoritative and the SI value

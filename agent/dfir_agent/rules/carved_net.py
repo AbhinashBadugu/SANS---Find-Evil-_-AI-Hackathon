@@ -45,7 +45,7 @@ def _suspicious(ip: str, path: str, c2_ips: set[str]) -> str | None:
         return None
     pl = path.lower()
     if _BEACON in pl:
-        return "httppump-style /ads/ beacon path"
+        return "suspicious /ads/-style beacon path"
     if _PAYLOAD_EXT.search(pl) or _CGI in pl:
         return "payload/script download path"
     if _TOKEN.match(path) and _is_public(ip):

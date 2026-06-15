@@ -149,6 +149,14 @@ async def disk(state: CaseState, ctx: NodeContext) -> CaseState:
             action=f"disk corroboration -> {len(new_findings)} disk finding(s)",
             rationale="Check each memory-surfaced path against MFT (existence/timestomp) and shimcache (execution).",
         )
+        # File-based detections (Java cache, PE/strings, registry C2, hashing) need
+        # files carved off the image — run them now, while the mount is still open.
+        if mft_tr and mft_tr.status == ToolResultStatus.success:
+            try:
+                from .file_detect import run_file_detections
+                await run_file_detections(state, ctx, host, ewf1, _csv(mft_tr, "mft.csv") or _csv(mft_tr))
+            except Exception as e:  # noqa: BLE001 — an optional detection must never abort the disk node
+                state.gaps.append(f"{host.host_id}: file detections errored ({type(e).__name__}: {e}).")
     finally:
         if mount_dir:
             await _call(state, ctx, host, "close_ewf", mount_dir=mount_dir)

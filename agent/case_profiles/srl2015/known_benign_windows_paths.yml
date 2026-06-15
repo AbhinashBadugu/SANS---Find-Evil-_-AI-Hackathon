@@ -1,0 +1,5 @@
+# SRL-2015 extra benign path prefixes (case DATA). A finding resting solely on a
+# path here is self-corrected. Keep narrow — generic signed-location suppression
+# already lives in rules/benign_allowlist.py.
+benign_paths:
+  - "\\program files\\kernelpro\\usb over ethernet\\"

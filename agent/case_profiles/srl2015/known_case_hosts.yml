@@ -1,0 +1,6 @@
+# SRL-2015 topology (case DATA) — used to resolve lateral-hop source IPs to hosts.
+hosts:
+  win2008R2-controller: "10.3.58.4"
+  win7-32-nromanoff: "10.3.58.5"
+  win7-64-nfury: "10.3.58.6"
+  xp-tdungan: "10.3.58.7"
