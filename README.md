@@ -46,7 +46,7 @@ This is also why results are **reproducible** — same evidence + same code → 
 │                trigger runs, verify any citation, score vs the oracle
 ├─ agent/        Autonomous DFIR agent — 8 LangGraph-style nodes + deterministic
 │                rules; cross-host correlation; capped self-correction loop
-└─ mcp_server/   16 typed, read-only forensic tools (the evidence boundary)
+└─ mcp_server/   28 typed, read-only forensic tools (the evidence boundary)
 ```
 
 ### What the agent detects (each rule grounded + precision-tested)
@@ -118,13 +118,18 @@ real `provenance_id`, and *"delete the evidence"* is refused by design. See
 - `provenance.jsonl` — immutable evidence audit ledger
 - `agent/accuracy_report.md` — recall + citation quality vs `oracle_v2`
 
-## The 16 MCP tools (the read-only evidence boundary)
+## The 28 MCP tools (the read-only evidence boundary)
 | Area | Tools |
 |------|-------|
-| Integrity | `hash_evidence`, `verify_ewf` |
+| Integrity | `hash_evidence`, `hash_file`, `compare_hashes_across_hosts`, `verify_ewf` |
 | Memory | `run_volatility_plugin` (10 allowlisted plugins), `carve_network_artifacts` |
 | Disk (no admin) | `open_ewf`, `close_ewf`, `inspect_disk`, `extract_artifacts` |
 | Parsers | `parse_mft`, `parse_registry`, `parse_evtx`, `parse_shimcache`, `parse_evt_legacy` |
+| Registry / config | `parse_reg_export`, `extract_c2_from_registry` |
+| PE & dropper triage | `extract_strings`, `extract_pe_metadata`, `detect_pyinstaller`, `extract_pdb_paths`, `extract_embedded_urls` |
+| Carving | `carve_files` |
+| Browser / Java | `parse_java_cache` |
+| Archive | `extract_archive` |
 | Timeline | `generate_timeline`, `filter_timeline` |
 | Read-back | `read_artifact` |
 
