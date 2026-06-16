@@ -23,7 +23,7 @@ milestones — apples-to-apples with a stock-Claude baseline:
 | **Wrong conclusions** (e.g. wrong patient-zero) | — | **0** |
 | **Citation quality** | partial | **100% of findings carry `{tool, artifact, provenance_id}`** |
 
-Reproduce it in seconds (deterministic, no LLM) — see [§ Score it](#4-score-it-against-the-ground-truth).
+Reproduce it in seconds (deterministic, no LLM, **no API key**) — see [Quick start](#quick-start-for-judges).
 
 ---
 
@@ -83,9 +83,14 @@ reports any missing:
 If a tool is missing, the steps that need it are **skipped and flagged** in the report —
 never faked.
 
-**3. An Anthropic API key** — only the conversational UI / agent loop calls the model.
-Put it in `webui/.env` (`install.sh` scaffolds it from `webui/.env.example`). The
-dashboard, scorer and tests run **without** a key.
+**3. An Anthropic API key — OPTIONAL; not required to run or score the analysis.**
+The full pipeline, the cited per-host + cross-host reports, the provenance ledger, and
+the deterministic scorer all run with **no API key**. A key only adds two *additive*
+extras: LLM-narrated prose in the report's executive summary (the facts and citations
+are identical either way — the summary is just labelled `_(deterministic)_` vs
+`_(LLM-narrated)_`), and the conversational chat UI. **Judges can run and score the
+entire case from the terminal with no key.** If you want the chat UI, put your own key
+in `webui/.env`.
 
 ---
 
@@ -95,22 +100,15 @@ dashboard, scorer and tests run **without** a key.
 git clone <this-repo> && cd find-evil
 ./install.sh                 # venv + deps + tool preflight + 158 unit tests
 source .venv/bin/activate
-echo 'ANTHROPIC_API_KEY=sk-ant-...' > webui/.env    # for the chat UI only
+# No Anthropic API key needed for the analysis or scoring (steps 1-3 below).
 ```
 
-### 1. Run the conversational UI (recommended)
-```bash
-PYTHONPATH="$PWD" python -m webui.server     # → open http://127.0.0.1:8077
-```
-Point it at evidence (*"analyse these evidence files: …"*) or ask
-*"who is patient zero and how do you know?"* — every answer cites a real
-`provenance_id`, and *"delete the evidence"* is refused by design.
-
-### 2. Or run headless on raw evidence (read-only)
+### 1. Run the full analysis — **no API key required**
 Give it the disk/memory images; it leads the whole pipeline (manifest → hash → mount →
-memory + disk + timeline → correlation → cross-host report). It auto-classifies disk vs
-memory and groups by host from the filename; everything stays under one read-only
-`EVIDENCE_ROOT`.
+memory + disk + timeline → correlation → cross-host report), entirely from court-vetted
+tools. It auto-classifies disk vs memory and groups by host from the filename; everything
+stays under one read-only `EVIDENCE_ROOT`. **This is the path judges run from the terminal —
+no Anthropic key needed.**
 ```bash
 cd agent
 PYTHONPATH="$PWD/../mcp_server:$PWD" python -m eval.run_from_evidence \
@@ -124,15 +122,9 @@ PYTHONPATH="$PWD/../mcp_server:$PWD" python -m eval.run_from_evidence \
 ```
 A path that is missing, or that escapes `EVIDENCE_ROOT`, is **refused**. On unreadable
 evidence the agent emits **zero findings and discloses every gap** — never a fabricated
-result.
+result. (With no key, report summaries are deterministic; a key only adds optional prose.)
 
-### 3. Re-run the tests
-```bash
-cd agent && PYTHONPATH="$PWD/../mcp_server:$PWD" python -m pytest -q     # 145 rule/scoring tests
-cd ../mcp_server && PYTHONPATH="$PWD" python -m pytest -q                # 13 path-safety / allowlist tests
-```
-
-### 4. Score it against the ground truth
+### 2. Score it against the ground truth — **no API key**
 Deterministic, no LLM, no network — grades the run's findings + reports against the
 answer key (`validation_profiles/srl2015.yml`, ported verbatim from `oracle_v2`):
 ```bash
@@ -142,6 +134,23 @@ PYTHONPATH="$PWD/../mcp_server:$PWD" python -m eval.score_profile \
   --profile validation_profiles/srl2015.yml
 # writes <case>/agent/validation_score.{md,json}
 ```
+
+### 3. Re-run the tests — **no API key**
+```bash
+cd agent && PYTHONPATH="$PWD/../mcp_server:$PWD" python -m pytest -q     # 145 rule/scoring tests
+cd ../mcp_server && PYTHONPATH="$PWD" python -m pytest -q                # 13 path-safety / allowlist tests
+```
+
+### 4. (Optional) Conversational UI — the only part that needs a key
+A chat interface to explore the case in natural language. Requires **your own** Anthropic
+key in `webui/.env` (the dashboard/report views still work without one; only the chat box
+calls the model).
+```bash
+PYTHONPATH="$PWD" python -m webui.server     # → open http://127.0.0.1:8077
+```
+Ask *"who is patient zero and how do you know?"* — every answer cites a real
+`provenance_id`, and *"delete the evidence"* is refused by design. The chat LLM is an
+orchestrator/explainer only: read-only tools, no shell.
 
 ---
 
