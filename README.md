@@ -24,6 +24,8 @@ milestones — apples-to-apples with a stock-Claude baseline:
 | **Citation quality** | partial | **100% of findings carry `{tool, artifact, provenance_id}`** |
 
 Reproduce it in seconds (deterministic, no LLM, **no API key**) — see [Quick start](#quick-start-for-judges).
+Full self-assessment — false positives, missed artifacts, evidence-integrity & spoliation
+testing, and honest limits — in **[ACCURACY_REPORT.md](ACCURACY_REPORT.md)**.
 
 ---
 
