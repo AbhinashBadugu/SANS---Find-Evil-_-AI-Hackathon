@@ -81,6 +81,9 @@ directly**; every output is a **structured, cited finding** backed by the proven
 **1. Python 3.10+** and the packages in [`requirements.txt`](requirements.txt)
 (`install.sh` installs these into a local `.venv`): `anthropic`, `mcp`, `pydantic`,
 `starlette`/`uvicorn` (UI), `PyYAML`, `pefile`, `pytest`.
+On Debian/Ubuntu, make sure the venv builder is present first:
+`sudo apt install -y python3-venv` (or the versioned `python3.12-venv`). `install.sh`
+checks for it and tells you if it's missing.
 
 **2. System forensic tools** — the agent *shells out to court-vetted binaries*; it does
 not reimplement them. These ship with **SANS SIFT**; `install.sh` runs a preflight that

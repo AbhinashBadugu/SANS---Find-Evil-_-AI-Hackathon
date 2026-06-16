@@ -29,10 +29,21 @@ assert v >= (3, 10), f"Python 3.10+ required, found {v.major}.{v.minor}.{v.micro
 print(f"[ok]  python {v.major}.{v.minor}.{v.micro}")
 PYV
 
-# 2) Virtualenv
+# 2) Virtualenv  (needs the python3-venv / ensurepip system package on Debian/Ubuntu)
+if ! "$PY" -c "import ensurepip" >/dev/null 2>&1; then
+  echo "ERROR: Python venv support (ensurepip) is missing — cannot create the .venv."
+  echo "       Install it first, then re-run ./install.sh :"
+  echo "         sudo apt install -y python3-venv"
+  echo "       (if that reports nothing to install, use the versioned name, e.g.:"
+  echo "         sudo apt install -y python3.12-venv )"
+  exit 1
+fi
 if [ ! -d "$VENV" ]; then
   echo "==> creating virtualenv at .venv"
-  "$PY" -m venv "$VENV"
+  if ! "$PY" -m venv "$VENV"; then
+    echo "ERROR: 'python3 -m venv' failed. Install 'python3-venv' (see above) and re-run."
+    exit 1
+  fi
 fi
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
