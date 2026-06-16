@@ -180,6 +180,10 @@ The attack chain the agent must reconstruct (and is graded against): Java drive-
 → PsExec lateral movement to the DC → `system4.rar` exfil on `nfury` — plus a planted
 benign service the agent must **not** flag (the self-correction test).
 
+📂 **Detailed dataset documentation** — ground truth (`oracle_v2`), the SIFT baseline, and
+the agent's scored results for SRL-2015 **and** SRL-2018 — is in
+**[`dataset-documentation/`](dataset-documentation/)**.
+
 ---
 
 ## What we ran & results

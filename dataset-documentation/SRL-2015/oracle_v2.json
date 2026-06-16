@@ -1,0 +1,104 @@
+{
+  "case": "SRL-2015",
+  "version": 2,
+  "supersedes": "~/reports/SRL-2015_case_report.md (v1)",
+  "generated_utc": "2026-06-07",
+  "basis": "Deterministic adjudication against raw evidence (parsed CSVs + read-only NTFS mounts). See scoring/adjudication.md. v1 oracle corrected: patient zero, initial access, primary RAT, exfil.",
+  "domain": "shieldbase.local",
+  "subnet": "10.3.58.0/24",
+  "hosts": {
+    "10.3.58.4": {"name": "win2008R2-controller", "netbios": "CONTROLLER", "role": "Domain Controller", "os": "Win2008R2"},
+    "10.3.58.5": {"name": "win7-32-nromanoff", "netbios": "WKS-WIN732BITA", "role": "workstation", "os": "Win7x86"},
+    "10.3.58.6": {"name": "win7-64-nfury", "netbios": "WKS-WIN764BITB", "role": "workstation", "os": "Win7x64"},
+    "10.3.58.7": {"name": "xp-tdungan", "netbios": "WKS-WINXP32BIT", "role": "workstation", "os": "WinXPSP3"}
+  },
+  "non_attacker": {
+    "10.3.16.5": "Incident-response / examiner host (F-Response iSCSI + RDP). rsydow type-10 RDP from here is IR activity, not attacker.",
+    "usboesrv.exe / 96.255.98.154": "Legitimate KernelPro 'USB over Ethernet' (installed 2012-03-20, pre-incident).",
+    "Skype IPs (69.171.229.13, 184.51.x)": "Benign user app traffic."
+  },
+  "milestones": [
+    {
+      "id": "M1_initial_access",
+      "attack": "T1189 Drive-by / T1204 User Execution (signed Java applet)",
+      "summary": "tdungan compromised via malicious signed Java applet Signed_Update.jar served from 207.58.245.179; downloaded second-stage PE from 207.58.245.179:80/tY77np5Yyi.",
+      "key_facts": ["207.58.245.179", "Signed_Update.jar", "tY77np5Yyi", "pkxezy1tji98.exe", "7a0fcd15ee1c2d9d196ab6515adf2f87"],
+      "citation": "tdungan Java cache .idx (6f13884-712bc739.idx, 63b75a3e-77699f39.idx); MFT $FN 2012-04-03 00:33:15",
+      "weight": 1.0
+    },
+    {
+      "id": "M2_patient_zero",
+      "attack": "ordering",
+      "summary": "Patient zero = xp-tdungan (10.3.58.7); first malicious activity 2012-04-03 00:33, ~18h before any other host.",
+      "key_facts": ["tdungan", "10.3.58.7", "patient zero", "2012-04-03"],
+      "anti_facts": ["nromanoff is patient zero", "patient zero = nromanoff"],
+      "citation": "tdungan MFT $FN 00:33; nromanoff first inbound PsExec/4624 FROM 10.3.58.7 @ 21:11",
+      "weight": 1.0
+    },
+    {
+      "id": "M3_primary_rat",
+      "attack": "T1071 HTTP C2 (httppump backdoor)",
+      "summary": "Primary implant = httppump HTTP backdoor masquerading as C:\\Windows\\system32\\dllhost\\svchost.exe (MD5 4c7906e2f2a82fdfad74b47c90350771); loader a.exe (c4b0458c04abdaa773348c2668212b45). On tdungan, nromanoff, nfury.",
+      "key_facts": ["dllhost", "svchost.exe", "4c7906e2f2a82fdfad74b47c90350771", "httppump", "a.exe", "c4b0458c04abdaa773348c2668212b45"],
+      "citation": "md5sum on mounts (tdungan, nromanoff); PDB winclient.pdb / i.pdb",
+      "weight": 1.0
+    },
+    {
+      "id": "M4_secondary_implant",
+      "attack": "T1027 Packed / T1071 C2 (spinlock)",
+      "summary": "Secondary PyInstaller-packed implant spinlock.exe (6bff2aebb8852fc2658b9768d2166ece) beaconing to 199.73.28.114:443; process injection into svchost.exe (malfind MZ-in-RWX).",
+      "key_facts": ["spinlock.exe", "199.73.28.114", "PyInstaller", "_MEI", "injection"],
+      "citation": "Vol3 netscan/malfind; MFT; Prefetch (run count 16)",
+      "weight": 1.0
+    },
+    {
+      "id": "M5_persistence",
+      "attack": "T1547.001 Run key / T1543.003 Service",
+      "summary": "HKLM Run value svchost=c:\\windows\\system32\\dllhost\\svchost.exe (tdungan, nromanoff); service winsvchost=cmd /k …dllhost\\svchost.exe (nromanoff 7045 @ 23:52); Netman\\domain C2 config; at jobs (DC, nfury).",
+      "key_facts": ["Run key", "svchost", "winsvchost", "Netman", "At1.job", "At2.job"],
+      "citation": "Vol3 printkey; nromanoff System.evtx 7045; winclient.reg; nfury MFT \\Windows\\Tasks",
+      "weight": 1.0
+    },
+    {
+      "id": "M6_cred_access",
+      "attack": "T1003 OS Credential Dumping / T1078 Valid Accounts",
+      "summary": "Credential theft and reuse of domain accounts incl. domain-admin SHIELDBASE\\vibranium (4672) and rsydow/SRL-Helpdesk; tooling mimikatz sekurlsa.dll + avbypass.exe (nromanoff), procdump (DC).",
+      "key_facts": ["vibranium", "rsydow", "4672", "credential", "lsass", "sekurlsa.dll", "mimikatz", "domain admin"],
+      "citation": "nromanoff MFT sekurlsa.dll; DC Security.evtx 4672 vibranium; cross-host profiles",
+      "note": "wceisvista.inf is NOT valid WCE evidence (legit winsxs INF) — see adjudication.md.",
+      "weight": 1.0
+    },
+    {
+      "id": "M7_lateral_movement",
+      "attack": "T1021.002 SMB/Admin / T1570 / T1021.001 RDP",
+      "summary": "tdungan -> nromanoff (04-03 21:11) -> DC (04-04, RDP type-10 vibranium from 10.3.58.7 @ 18:17:53) -> nfury (04-05/06), via PsExec (7045) + stolen creds + at jobs.",
+      "key_facts": ["PsExec", "PSEXESVC", "7045", "vibranium", "18:17:53", "10.3.58.7", "RDP", "type 10"],
+      "citation": "nromanoff/DC/nfury System+Security evtx",
+      "weight": 1.0
+    },
+    {
+      "id": "M8_c2",
+      "attack": "T1071 / T1571 C2",
+      "summary": "Per-host httppump C2: tdungan http://199.73.28.114/ads/, nromanoff http://12.190.135.235/ads/, build-default http://192.168.1.5/ads/. spinlock C2 199.73.28.114:443. Delivery 207.58.245.179.",
+      "key_facts": ["199.73.28.114", "12.190.135.235", "192.168.1.5", "207.58.245.179", "/ads/"],
+      "citation": "winclient.reg (tdungan, nromanoff); svchost strings; netscan",
+      "weight": 1.0
+    },
+    {
+      "id": "M9_exfil",
+      "attack": "T1560 Archive Collected Data / T1074 Staging",
+      "summary": "Data staged on nfury into password/header-encrypted RAR system4.rar (6,297,428 bytes, MD5 06a889b10ea9465e46554d6460f29bf2) at \\Users\\Public\\Temp, 2012-04-06.",
+      "key_facts": ["system4.rar", "06a889b10ea9465e46554d6460f29bf2", "exfil", "staging", "RAR"],
+      "citation": "nfury mount ls+md5sum; MFT $FN 2012-04-06",
+      "weight": 1.0
+    },
+    {
+      "id": "M10_self_correction",
+      "attack": "anti-hallucination",
+      "summary": "usboesrv.exe / 96.255.98.154 is legitimate USB-over-Ethernet (not C2); 10.3.16.5 is the IR host (rsydow type-10 RDP from it is response activity). Correctly excluding these = self-correction credit.",
+      "key_facts": ["usboesrv", "USB over Ethernet", "legitimate", "10.3.16.5", "F-Response"],
+      "citation": "DC MFT \\Program Files\\USB over Ethernet; install 2012-03-20",
+      "weight": 0.5
+    }
+  ]
+}
