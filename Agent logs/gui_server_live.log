@@ -1,0 +1,57 @@
+
+  Find Evil — conversational DFIR agent
+  http://127.0.0.1:8077   (model=claude-sonnet-4-6, chat=ON)
+
+INFO:     Started server process [12371]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8077 (Press CTRL+C to quit)
+INFO:     127.0.0.1:40438 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40438 - "GET /static/app.js?v=4 HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:40438 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40438 - "GET /api/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40438 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40438 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40438 - "GET /api/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40438 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40446 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49758 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60528 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34330 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59748 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43424 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47704 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34234 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40276 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55860 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55860 - "GET /static/marked.min.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:55860 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55860 - "GET /api/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55866 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55866 - "GET /api/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56016 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56016 - "GET /api/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34682 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35388 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37214 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51228 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54802 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49688 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41074 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59436 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57130 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34226 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44702 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42132 - "GET /api/case/srl2015/report?host=xp-tdungan HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59898 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58540 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46660 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46660 - "GET /static/style.css?v=3 HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:46664 - "GET /static/app.js?v=4 HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:46664 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46664 - "GET /api/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46664 - "GET /api/case/srl2015/report HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52130 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52130 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52130 - "GET /api/cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52142 - "POST /api/chat HTTP/1.1" 200 OK
