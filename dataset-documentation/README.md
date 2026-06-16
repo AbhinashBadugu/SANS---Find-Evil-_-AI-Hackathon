@@ -36,9 +36,10 @@ be flagged — the self-correction test. These are encoded as **10 kill-chain mi
 
 | File | What it is |
 |------|------------|
-| [`oracle_v2.json`](SRL-2015/oracle_v2.json) | **Ground truth** — 10 attack milestones, each adjudicated against raw evidence (parsed CSVs + read-only NTFS mounts). The graded answer key. |
+| [`oracle_v2.json`](SRL-2015/oracle_v2.json) | **Ground truth** — 10 attack milestones, each adjudicated against raw evidence (parsed CSVs + read-only NTFS mounts). The graded answer key. *(Stays JSON: it is the **scorer's input data**, parsed field-by-field — not a human report.)* |
 | [`SIFT_baseline_results.md`](SRL-2015/SIFT_baseline_results.md) | **Stock baseline** — Protocol SIFT / stock-Claude run(s) scored against the same oracle: mean recall **0.90**, **~1 hallucination/run** (`wceisvista.inf` misattributed as WCE). |
-| [`agent_result_scored_vs_oracle.md`](SRL-2015/agent_result_scored_vs_oracle.md) / `.json` | **This agent's result** — deterministic scoring of the latest from-scratch run vs `oracle_v2`. |
+| [`agent_result_scored_vs_oracle.md`](SRL-2015/agent_result_scored_vs_oracle.md) | **This agent's result** — deterministic scoring of the latest from-scratch run vs `oracle_v2`: **10/10, 0 hallucinations**. |
+| [`tools_and_artifacts.md`](SRL-2015/tools_and_artifacts.md) | **Tools & artifacts** — the **1,244** court-vetted tool executions and the artifacts analyzed, extracted from the run's provenance ledger. |
 
 **What it found (before → after):**
 
