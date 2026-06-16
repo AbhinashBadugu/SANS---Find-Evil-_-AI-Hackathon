@@ -78,6 +78,11 @@ hallucination **every run** — the benign `wceisvista.inf` mislabeled as Window
 Editor. The agent cannot produce that class of error structurally: a benign file with no
 malicious evidence has nothing to cite, so it never becomes a "confirmed" finding.
 
+**See it in action:** a step-by-step **live walkthrough** of the self-correcting loop — a real
+finding (`CAL-0001`) whose two citations are resolved against the immutable ledger before the
+fact is asserted, with the raw ledger entries included — is in
+[`self-correcting-loop/`](self-correcting-loop/).
+
 ---
 
 ## Limits of this self-assessment

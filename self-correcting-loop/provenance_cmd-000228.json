@@ -1,0 +1,31 @@
+{
+  "provenance_id": "cmd-000228",
+  "case_id": "srl2015",
+  "host_id": "win2008R2-controller",
+  "tool_name": "MFTECmd",
+  "wrapper_name": "parse_mft",
+  "command": [
+    "dotnet",
+    "/opt/zimmermantools/MFTECmd.dll",
+    "-f",
+    "/home/sansforensics/Desktop/DFIR agent/Agent analysis/cases/srl2015/hosts/win2008R2-controller/extracted/$MFT",
+    "--csv",
+    "/home/sansforensics/Desktop/DFIR agent/Agent analysis/cases/srl2015/hosts/win2008R2-controller/mft",
+    "--csvf",
+    "mft.csv"
+  ],
+  "input_paths": [
+    "/home/sansforensics/Desktop/DFIR agent/Agent analysis/cases/srl2015/hosts/win2008R2-controller/extracted/$MFT"
+  ],
+  "output_paths": [
+    "/home/sansforensics/Desktop/DFIR agent/Agent analysis/cases/srl2015/hosts/win2008R2-controller/mft"
+  ],
+  "start_time": "2026-06-16T00:03:09.729793Z",
+  "end_time": "2026-06-16T00:03:15.659477Z",
+  "exit_code": 0,
+  "stdout_path": "/home/sansforensics/Desktop/DFIR agent/Agent analysis/cases/srl2015/hosts/win2008R2-controller/tool_runs/cmd-000228.stdout.txt",
+  "stderr_path": "/home/sansforensics/Desktop/DFIR agent/Agent analysis/cases/srl2015/hosts/win2008R2-controller/tool_runs/cmd-000228.stderr.txt",
+  "input_sha256": null,
+  "status": "success",
+  "error": null
+}
