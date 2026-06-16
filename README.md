@@ -240,5 +240,10 @@ yet proven (SRL-2018 is the stretch goal). The agent finds what it has rules for
 human still wins on novel attacks. Tool execution (especially Plaso) dominates wall-clock
 (~45–90 min for a full 4-host run from scratch); reviewing and scoring take seconds.
 
+**Roadmap to full enterprise coverage** — live/triage data and **Linux, macOS &
+network-device** agents (the OS/device-family analyzer architecture is already in the code;
+expansion = adding more typed read-only tools + artifact parsers) — is in
+**[AGENT_CAPABILITY_EXPANSION_REPORT.md](AGENT_CAPABILITY_EXPANSION_REPORT.md)**.
+
 ## License
 MIT — see [LICENSE](LICENSE).

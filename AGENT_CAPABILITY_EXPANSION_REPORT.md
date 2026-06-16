@@ -108,3 +108,69 @@ JAR, procdump not targeting lsass, single-host hash) prove it does NOT over-fire
 3. **Re-score after the live run**; target recall ≥ baseline with the M6
    credential-access milestone moving from partial → correct.
 4. Drop in an `srl2018.yml` profile to demonstrate the scorer's case-agnostic reuse.
+
+---
+
+## Roadmap — toward complete enterprise coverage
+
+SRL-2015 validates the agent on **Windows disk + memory**. Reaching full enterprise
+coverage does **not** require a redesign — the engine is already platform-agnostic. Every
+expansion is the *same* shape: **add more typed, read-only tools and artifact parsers.** The
+hard parts — read-only path gate, provenance ledger, citation linter, deterministic
+correlation, OS-family routing, honest coverage reporting — are already built and reused
+unchanged.
+
+### The architecture is already multi-platform (proof, not promise)
+
+- **OS/device-family routing exists:** `analyzers/registry.py` → `select_analyzer(os_family)`
+  dispatches each host to its analyzer; `manifest_intake.host_os_family()` classifies
+  Windows / Linux / macOS / network-device / unknown.
+- **Analyzer packages already exist:** `analyzers/{windows,linux,macos,network_device}/` —
+  **Windows is `implemented = True`**; the others are `NotImplementedAnalyzer`
+  ("architecture defined; parsing wrappers not implemented yet") **with their artifact /
+  capability sets already declared** in each `modules.py`.
+- **Honest gaps, never faked:** point the agent at Linux/macOS/network evidence *today* and
+  `build_capability_report()` returns `present_but_wrapper_missing` — *"Architecture supports
+  this artifact; MCP wrapper is not implemented yet"* — so it reports exactly what it could
+  analyze and what's missing, instead of crashing or fabricating.
+
+> So lighting up a new platform = **implement the parsing wrappers for the already-declared
+> artifacts and flip `implemented = True`.** No core rewrite.
+
+### Next steps (priority order)
+
+**1. Live / triage data** — beyond dead disk + memory images. Ingest live-collected triage
+(KAPE / Velociraptor collections, live memory captures, EDR exports). Same read-only model —
+the agent reads the *collection*, never the live host. Only the manifest intake gains a
+triage-collection mode; analyzers and rules are unchanged.
+
+**2. Linux agent** — wrappers for the **already-declared** artifacts: `auth.log`/`secure`,
+journald, systemd units + timers, cron, bash/zsh history, SSH logs, auditd, package logs
+(apt/yum), web logs, `/etc` config, ext4 timeline (Plaso already parses Linux). Behaviour
+rules: suspicious cron/systemd persistence, reverse-shell history, webshell drop.
+
+**3. macOS agent** — wrappers for: unified logs (`log`), plists, LaunchAgents / LaunchDaemons,
+FSEvents, KnowledgeC / user activity, browser + shell history, TCC / quarantine. Rules:
+LaunchAgent persistence, unsigned / quarantine-bypass binaries.
+
+**4. Network devices** — wrappers for: device configs (firewall/router/switch), firewall /
+NAT / VPN / proxy logs, NetFlow, PCAP, Suricata / Zeek IDS-IPS alerts, DHCP / DNS / admin-login
+logs. Lights up the **network leg** of a campaign (C2 egress, on-the-wire lateral movement,
+exfil flows).
+
+### The payoff — cross-platform correlation under the same guarantees
+
+With all four families implemented, the **same** cross-host correlation engine reconstructs a
+campaign that *crosses platforms* — e.g. **phished Linux web server → credential reuse to a
+Windows DC → exfil seen in firewall NetFlow** — every finding still citing a `provenance_id`,
+still deterministic, still **unable to modify evidence**. The anti-hallucination and read-only
+guarantees hold across every new tool **by construction**, because each new tool is just
+another typed, path-gated, provenance-logged read-only wrapper.
+
+### Why this is low-risk to add
+
+Each capability is **additive and isolated**: one wrapper + one rule + (optionally) flip the
+analyzer flag. The CI universality guard (`test_no_case_iocs_in_core`) and the path /
+allowlist safety tests apply to new tools automatically. No core rewrite; coverage grows
+monotonically; and the honest coverage report (`parsed` vs `wrapper-missing`) measures the gap
+to "complete enterprise" at every step — never guesses it.
