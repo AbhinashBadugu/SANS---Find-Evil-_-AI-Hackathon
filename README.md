@@ -44,6 +44,9 @@ The anti-hallucination guarantee is **architectural, not a prompt:**
 
 Same evidence + same code → the same 10/10, every run.
 
+> 🔒 Full guardrail breakdown — **prompt-based vs architecture-based**, each cited to its
+> enforcing code and bypass test — is in **[SECURITY.md](SECURITY.md)**.
+
 ---
 
 ## Repository layout
