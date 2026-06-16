@@ -42,14 +42,34 @@ be flagged — the self-correction test. These are encoded as **10 kill-chain mi
 | [`tools_and_artifacts.md`](SRL-2015/tools_and_artifacts.md) | **Tools & artifacts** — the **1,244** court-vetted tool executions and the artifacts analyzed, extracted from the run's provenance ledger. |
 | [`comparison.md`](SRL-2015/comparison.md) | **3-way comparison + explanation** — ground truth vs SIFT baseline vs agent, milestone-by-milestone, with the agent's provenance evidence and *why* it wins. |
 
-**What it found (before → after):**
+**What it found — ground truth vs SIFT baseline vs this agent**
+(full per-milestone provenance + explanation in [`SRL-2015/comparison.md`](SRL-2015/comparison.md)):
 
-| Metric | Stock baseline | **This agent** |
-|--------|----------------|----------------|
-| Recall vs oracle_v2 | 0.90 | **1.00 — 10/10 milestones** |
-| Hallucinations | ~1 / run | **0** |
-| Wrong conclusions | (v1 oracle was wrong) | **0** (patient zero = `tdungan`, correct) |
-| Citations | partial | **100% — every finding cites a `provenance_id`** |
+| # | Ground truth (what happened) | Baseline r1·r2·r3 | Agent |
+|---|---|:---:|:---:|
+| M1 | Java drive-by `Signed_Update.jar` → tdungan | ✅·✅·✅ | ✅ |
+| M2 | patient zero = `xp-tdungan` (10.3.58.7) | ✅·✅·✅ | ✅ |
+| M3 | `httppump` RAT as `dllhost\svchost.exe` | ✅·✅·✅ | ✅ |
+| M4 | `spinlock.exe` PyInstaller implant | ✅·**—**·✅ | ✅ |
+| M5 | Run-key / `Netman` / At-job persistence | ✅·✅·✅ | ✅ |
+| M6 | `vibranium` domain-admin cred theft | ✅·✅·✅ | ✅ |
+| M7 | PsExec + RDP → DC | ✅·✅·✅ | ✅ |
+| M8 | per-host `httppump` C2 | ✅·✅·✅ | ✅ |
+| M9 | `system4.rar` exfil on nfury | **—·—**·✅ | ✅ |
+| M10 | `usboesrv.exe` = benign (self-correction) | ✅·✅·✅ | ✅ |
+| | **Recall vs oracle_v2** | **0.90** | **1.00** |
+| | **Hallucinations** | **1 / run** (`wceisvista.inf`→WCE) | **0** |
+| | **Determinism** | no (0.79–1.0) | **yes (10/10 every run)** |
+
+**Why the agent wins — architecture, not luck:**
+- **Recovers the baseline's misses.** M9 (exfil, missed **2/3** runs) and M4 (implant, **1/3**)
+  are **deterministic rules** here — a staged-archive `$MFT` rule and a PyInstaller-packing
+  rule — so they fire every run. What an LLM forgets, code doesn't.
+- **Zero hallucinations.** A finding is emitted only if it cites a `provenance_id` that
+  resolves, or the **citation linter drops it** — so the benign INF the baseline mislabels as
+  WCE *every run* can't survive here.
+- **Deterministic.** Baseline recall swung 0.79→1.0 on *identical* prompts; the agent returns
+  the same 10/10 every run (facts are Python; the LLM only narrates).
 
 **Reproduce it** (no API key needed; deterministic):
 ```bash
