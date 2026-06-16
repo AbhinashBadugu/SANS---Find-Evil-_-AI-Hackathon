@@ -40,6 +40,7 @@ be flagged — the self-correction test. These are encoded as **10 kill-chain mi
 | [`SIFT_baseline_results.md`](SRL-2015/SIFT_baseline_results.md) | **Stock baseline** — Protocol SIFT / stock-Claude run(s) scored against the same oracle: mean recall **0.90**, **~1 hallucination/run** (`wceisvista.inf` misattributed as WCE). |
 | [`agent_result_scored_vs_oracle.md`](SRL-2015/agent_result_scored_vs_oracle.md) | **This agent's result** — deterministic scoring of the latest from-scratch run vs `oracle_v2`: **10/10, 0 hallucinations**. |
 | [`tools_and_artifacts.md`](SRL-2015/tools_and_artifacts.md) | **Tools & artifacts** — the **1,244** court-vetted tool executions and the artifacts analyzed, extracted from the run's provenance ledger. |
+| [`comparison.md`](SRL-2015/comparison.md) | **3-way comparison + explanation** — ground truth vs SIFT baseline vs agent, milestone-by-milestone, with the agent's provenance evidence and *why* it wins. |
 
 **What it found (before → after):**
 
